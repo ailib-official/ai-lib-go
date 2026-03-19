@@ -39,13 +39,20 @@ func (l *Loader) LoadBytes(data []byte, source string) (any, error) {
 	}
 
 	version, _ := meta["protocol_version"].(string)
-	if strings.HasPrefix(version, "v2") || hasCore(meta) {
+	if strings.HasPrefix(version, "2") || hasCore(meta) || hasCapabilityProfile(meta) {
 		var out V2Manifest
 		if err := unmarshalBySource(data, source, &out); err != nil {
 			return nil, err
 		}
-		if out.ID == "" || out.Core.Endpoint.BaseURL == "" {
+		baseURL := out.Endpoint.BaseURL
+		if baseURL == "" && out.Core != nil {
+			baseURL = out.Core.Endpoint.BaseURL
+		}
+		if out.ID == "" || baseURL == "" {
 			return nil, fmt.Errorf("invalid v2 manifest: missing id or base_url")
+		}
+		if err := ValidateCapabilityProfile(out.CapabilityProfile); err != nil {
+			return nil, fmt.Errorf("invalid capability_profile: %w", err)
 		}
 		return &out, nil
 	}
@@ -54,7 +61,11 @@ func (l *Loader) LoadBytes(data []byte, source string) (any, error) {
 	if err := unmarshalBySource(data, source, &out); err != nil {
 		return nil, err
 	}
-	if out.ID == "" || out.BaseURL == "" {
+	baseURL := out.BaseURL
+	if baseURL == "" {
+		baseURL = out.Endpoint.BaseURL
+	}
+	if out.ID == "" || baseURL == "" {
 		return nil, fmt.Errorf("invalid v1 manifest: missing id or base_url")
 	}
 	return &out, nil
@@ -62,6 +73,11 @@ func (l *Loader) LoadBytes(data []byte, source string) (any, error) {
 
 func hasCore(meta map[string]any) bool {
 	_, ok := meta["core"]
+	return ok
+}
+
+func hasCapabilityProfile(meta map[string]any) bool {
+	_, ok := meta["capability_profile"]
 	return ok
 }
 

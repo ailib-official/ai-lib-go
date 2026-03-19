@@ -95,9 +95,8 @@ func TestMCPCapabilityGuard(t *testing.T) {
 	manifest := `
 id: "test-provider"
 protocol_version: "2.0"
-core:
-  endpoint:
-    base_url: "http://127.0.0.1:65535"
+endpoint:
+  base_url: "http://127.0.0.1:65535"
 `
 	c, err := NewClientBuilder().WithProtocolData([]byte(manifest)).Build()
 	if err != nil {
@@ -141,21 +140,17 @@ func TestAdvancedCapabilityEndpoints(t *testing.T) {
 	manifest := fmt.Sprintf(`
 id: "test-provider"
 protocol_version: "2.0"
-core:
-  endpoint:
-    base_url: "%s"
-    endpoints:
-      mcp_list_tools: { path: "/mcp/tools/list", method: "POST" }
-      mcp_call_tool: { path: "/mcp/tools/call", method: "POST" }
-      computer_use: { path: "/computer-use/actions", method: "POST" }
-      reasoning: { path: "/reasoning", method: "POST" }
-      video_generate: { path: "/video/generations", method: "POST" }
-      video_get: { path: "/video/generations/{id}", method: "GET" }
+endpoint:
+  base_url: "%s"
+endpoints:
+  mcp_list_tools: { path: "/mcp/tools/list", method: "POST" }
+  mcp_call_tool: { path: "/mcp/tools/call", method: "POST" }
+  computer_use: { path: "/computer-use/actions", method: "POST" }
+  reasoning: { path: "/reasoning", method: "POST" }
+  video_generate: { path: "/video/generations", method: "POST" }
+  video_get: { path: "/video/generations/{id}", method: "GET" }
 capabilities:
-  mcp: { required: true }
-  computer_use: { required: true }
-  reasoning: { required: true }
-  video: { required: true }
+  required: [text, mcp, computer_use, reasoning, video]
 `, srv.URL)
 	c, err := NewClientBuilder().WithProtocolData([]byte(manifest)).Build()
 	if err != nil {
@@ -209,8 +204,8 @@ func TestProviderErrorClassificationAndFallbackMatrix(t *testing.T) {
 	if apiErr.Code != ErrQuotaExhausted {
 		t.Fatalf("code expected %s got %s", ErrQuotaExhausted, apiErr.Code)
 	}
-	if !IsRetryableCode(apiErr.Code) {
-		t.Fatalf("quota exhausted should be retryable per ARCH-003")
+	if IsRetryableCode(apiErr.Code) {
+		t.Fatalf("quota exhausted should be non-retryable per compliance baseline")
 	}
 	if !IsFallbackableCode(apiErr.Code) {
 		t.Fatalf("quota exhausted should be fallbackable")
@@ -221,13 +216,12 @@ func TestRequestPreflightValidation(t *testing.T) {
 	manifest := `
 id: "test-provider"
 protocol_version: "2.0"
-core:
-  endpoint:
-    base_url: "http://127.0.0.1:65535"
-    endpoints:
-      chat_completions: { path: "chat/completions", method: "PATCH" }
+endpoint:
+  base_url: "http://127.0.0.1:65535"
+endpoints:
+  chat_completions: { path: "chat/completions", method: "PATCH" }
 capabilities:
-  chat: { required: true }
+  required: [text]
 `
 	c, err := NewClientBuilder().WithProtocolData([]byte(manifest)).Build()
 	if err != nil {
@@ -259,9 +253,8 @@ func TestManifestDrivenErrorClassification(t *testing.T) {
 	manifest := fmt.Sprintf(`
 id: "m1"
 protocol_version: "2.0"
-core:
-  endpoint:
-    base_url: "%s"
+endpoint:
+  base_url: "%s"
 error_classification:
   by_error_code:
     provider_boom: overloaded

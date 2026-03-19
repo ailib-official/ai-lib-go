@@ -28,13 +28,10 @@ func TestAdvancedCapabilitiesContract(t *testing.T) {
 	manifest := fmt.Sprintf(`
 id: "go-contract-provider"
 protocol_version: "2.0"
-core:
-  endpoint:
-    base_url: "%s"
+endpoint:
+  base_url: "%s"
 capabilities:
-  mcp: { required: true }
-  reasoning: { required: true }
-  video: { required: true }
+  required: ["text", "mcp", "reasoning", "video"]
 `, srv.URL)
 
 	client, err := ailib.NewClientBuilder().WithProtocolData([]byte(manifest)).Build()

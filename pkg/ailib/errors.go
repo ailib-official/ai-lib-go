@@ -38,7 +38,7 @@ func (e *APIError) Error() string {
 // Canonical implementation for cross-runtime consistency.
 func IsRetryableCode(code string) bool {
 	switch code {
-	case ErrRateLimited, ErrQuotaExhausted, ErrServerError, ErrOverloaded, ErrTimeout, ErrConflict:
+	case ErrRateLimited, ErrServerError, ErrOverloaded, ErrTimeout, ErrConflict:
 		return true
 	default:
 		return false

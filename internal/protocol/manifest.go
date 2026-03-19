@@ -2,7 +2,10 @@
 // 协议清单模型，统一 V1/V2 读取与端点解析。
 package protocol
 
-import "fmt"
+import (
+	"fmt"
+	"strings"
+)
 
 type V1Manifest struct {
 	ID              string           `yaml:"id" json:"id"`
@@ -12,8 +15,9 @@ type V1Manifest struct {
 	Capabilities    []string         `yaml:"capabilities" json:"capabilities"`
 	ErrorClass      ErrorClass       `yaml:"error_classification" json:"error_classification"`
 	RetryPolicy     RetryPolicy      `yaml:"retry_policy" json:"retry_policy"`
-	Auth            V1Auth           `yaml:"auth" json:"auth"`
-	Endpoints       []V1Endpoint     `yaml:"endpoints" json:"endpoints"`
+	Auth            *V1Auth          `yaml:"auth" json:"auth"`
+	Endpoint        EndpointConfig   `yaml:"endpoint" json:"endpoint"`
+	Endpoints       map[string]any   `yaml:"endpoints" json:"endpoints"`
 	Streaming       *StreamingConfig `yaml:"streaming" json:"streaming"`
 }
 
@@ -32,63 +36,58 @@ type V1Auth struct {
 	Prefix string `yaml:"prefix" json:"prefix"`
 }
 
-type V1Endpoint struct {
-	Name        string `yaml:"name" json:"name"`
-	OperationID string `yaml:"operation_id" json:"operation_id"`
-	Path        string `yaml:"path" json:"path"`
-	Method      string `yaml:"method" json:"method"`
+type EndpointConfig struct {
+	BaseURL    string         `yaml:"base_url" json:"base_url"`
+	Chat       string         `yaml:"chat" json:"chat"`
+	Embeddings string         `yaml:"embeddings" json:"embeddings"`
+	STT        string         `yaml:"stt" json:"stt"`
+	TTS        string         `yaml:"tts" json:"tts"`
+	Auth       *V2Auth        `yaml:"auth" json:"auth"`
+	Protocol   string         `yaml:"protocol" json:"protocol"`
+	TimeoutMS  int            `yaml:"timeout_ms" json:"timeout_ms"`
+	Endpoints  map[string]any `yaml:"endpoints" json:"endpoints"`
 }
 
 type V2Manifest struct {
-	ID              string           `yaml:"id" json:"id"`
-	ProtocolVersion string           `yaml:"protocol_version" json:"protocol_version"`
-	Core            V2Core           `yaml:"core" json:"core"`
-	ErrorClass      ErrorClass       `yaml:"error_classification" json:"error_classification"`
-	RetryPolicy     RetryPolicy      `yaml:"retry_policy" json:"retry_policy"`
-	Capabilities    V2Caps           `yaml:"capabilities" json:"capabilities"`
-	Streaming       *StreamingConfig `yaml:"streaming" json:"streaming"`
+	ID                string             `yaml:"id" json:"id"`
+	ProtocolVersion   string             `yaml:"protocol_version" json:"protocol_version"`
+	Endpoint          EndpointConfig     `yaml:"endpoint" json:"endpoint"`
+	Endpoints         map[string]any     `yaml:"endpoints" json:"endpoints"`
+	ErrorClass        ErrorClass         `yaml:"error_classification" json:"error_classification"`
+	RetryPolicy       RetryPolicy        `yaml:"retry_policy" json:"retry_policy"`
+	Capabilities      V2Caps             `yaml:"capabilities" json:"capabilities"`
+	CapabilityProfile *CapabilityProfile `yaml:"capability_profile" json:"capability_profile"`
+	Streaming         *StreamingConfig   `yaml:"streaming" json:"streaming"`
+	// Backward-compatible alias for old local fixtures.
+	Core *V2CoreLegacy `yaml:"core" json:"core"`
 }
 
-type V2Core struct {
-	Endpoint V2Endpoint `yaml:"endpoint" json:"endpoint"`
-	Auth     V2Auth     `yaml:"auth" json:"auth"`
-}
-
-type V2Endpoint struct {
-	BaseURL   string                 `yaml:"base_url" json:"base_url"`
-	Endpoints map[string]V2Operation `yaml:"endpoints" json:"endpoints"`
-}
-
-type V2Operation struct {
-	Path   string `yaml:"path" json:"path"`
-	Method string `yaml:"method" json:"method"`
+type V2CoreLegacy struct {
+	Endpoint EndpointConfig `yaml:"endpoint" json:"endpoint"`
+	Auth     V2Auth         `yaml:"auth" json:"auth"`
 }
 
 type V2Auth struct {
-	Type   string `yaml:"type" json:"type"`
-	Key    string `yaml:"key" json:"key"`
-	Prefix string `yaml:"prefix" json:"prefix"`
+	Type     string `yaml:"type" json:"type"`
+	Header   string `yaml:"header" json:"header"`
+	Key      string `yaml:"key" json:"key"`
+	Prefix   string `yaml:"prefix" json:"prefix"`
+	TokenEnv string `yaml:"token_env" json:"token_env"`
 }
 
 type V2Caps struct {
-	Chat        *RequiredCap `yaml:"chat" json:"chat"`
-	Streaming   *RequiredCap `yaml:"streaming" json:"streaming"`
-	Tools       *RequiredCap `yaml:"tools" json:"tools"`
-	Vision      *RequiredCap `yaml:"vision" json:"vision"`
-	Audio       *RequiredCap `yaml:"audio" json:"audio"`
-	Video       *RequiredCap `yaml:"video" json:"video"`
-	Embeddings  *RequiredCap `yaml:"embeddings" json:"embeddings"`
-	Batch       *RequiredCap `yaml:"batch" json:"batch"`
-	STT         *RequiredCap `yaml:"stt" json:"stt"`
-	TTS         *RequiredCap `yaml:"tts" json:"tts"`
-	Reranking   *RequiredCap `yaml:"reranking" json:"reranking"`
-	MCP         *RequiredCap `yaml:"mcp" json:"mcp"`
-	ComputerUse *RequiredCap `yaml:"computer_use" json:"computer_use"`
-	Reasoning   *RequiredCap `yaml:"reasoning" json:"reasoning"`
+	Required     []string        `yaml:"required" json:"required"`
+	Optional     []string        `yaml:"optional" json:"optional"`
+	FeatureFlags map[string]bool `yaml:"feature_flags" json:"feature_flags"`
 }
 
-type RequiredCap struct {
-	Required bool `yaml:"required" json:"required"`
+type CapabilityProfile struct {
+	Phase    string         `yaml:"phase" json:"phase"`
+	Inputs   map[string]any `yaml:"inputs" json:"inputs"`
+	Outcomes map[string]any `yaml:"outcomes" json:"outcomes"`
+	Systems  map[string]any `yaml:"systems" json:"systems"`
+	Process  map[string]any `yaml:"process" json:"process"`
+	Contract map[string]any `yaml:"contract" json:"contract"`
 }
 
 type ErrorClass struct {
@@ -104,9 +103,18 @@ type RetryPolicy struct {
 func BaseURL(m any) (string, error) {
 	switch v := m.(type) {
 	case *V1Manifest:
+		if v.Endpoint.BaseURL != "" {
+			return v.Endpoint.BaseURL, nil
+		}
 		return v.BaseURL, nil
 	case *V2Manifest:
-		return v.Core.Endpoint.BaseURL, nil
+		if v.Endpoint.BaseURL != "" {
+			return v.Endpoint.BaseURL, nil
+		}
+		if v.Core != nil {
+			return v.Core.Endpoint.BaseURL, nil
+		}
+		return "", nil
 	default:
 		return "", fmt.Errorf("unsupported manifest type: %T", m)
 	}
@@ -115,23 +123,50 @@ func BaseURL(m any) (string, error) {
 func AuthHeader(m any) (name string, valuePrefix string, err error) {
 	switch v := m.(type) {
 	case *V1Manifest:
-		h := v.Auth.Header
-		if h == "" {
-			h = "Authorization"
+		h := "Authorization"
+		p := ""
+		if v.Endpoint.Auth != nil {
+			if v.Endpoint.Auth.Header != "" {
+				h = v.Endpoint.Auth.Header
+			} else if v.Endpoint.Auth.Key != "" {
+				h = v.Endpoint.Auth.Key
+			}
+			p = v.Endpoint.Auth.Prefix
+			if p == "" && v.Endpoint.Auth.Type == "bearer" {
+				p = "Bearer "
+			}
 		}
-		p := v.Auth.Prefix
-		if p == "" && v.Auth.Type == "bearer" {
-			p = "Bearer "
+		if v.Auth != nil {
+			if v.Auth.Header != "" {
+				h = v.Auth.Header
+			}
+			if p == "" {
+				p = v.Auth.Prefix
+			}
+			if p == "" && v.Auth.Type == "bearer" {
+				p = "Bearer "
+			}
 		}
 		return h, p, nil
 	case *V2Manifest:
-		h := v.Core.Auth.Key
-		if h == "" {
-			h = "Authorization"
+		auth := v.Endpoint.Auth
+		if auth == nil && v.Core != nil {
+			auth = &v.Core.Auth
 		}
-		p := v.Core.Auth.Prefix
-		if p == "" && v.Core.Auth.Type == "bearer" {
-			p = "Bearer "
+		h := "Authorization"
+		if auth != nil {
+			if auth.Header != "" {
+				h = auth.Header
+			} else if auth.Key != "" {
+				h = auth.Key
+			}
+		}
+		p := ""
+		if auth != nil {
+			p = auth.Prefix
+			if p == "" && auth.Type == "bearer" {
+				p = "Bearer "
+			}
 		}
 		return h, p, nil
 	default:
@@ -142,14 +177,56 @@ func AuthHeader(m any) (name string, valuePrefix string, err error) {
 func EndpointFor(m any, key string, fallback string) (path string, method string) {
 	switch v := m.(type) {
 	case *V1Manifest:
-		for _, ep := range v.Endpoints {
-			if ep.OperationID == key || ep.Name == key {
-				return ep.Path, upperOrPOST(ep.Method)
+		if p, mth, ok := endpointFromMap(v.Endpoints, key); ok {
+			return p, mth
+		}
+		switch key {
+		case "chat_completions":
+			if v.Endpoint.Chat != "" {
+				return v.Endpoint.Chat, "POST"
+			}
+		case "embeddings":
+			if v.Endpoint.Embeddings != "" {
+				return v.Endpoint.Embeddings, "POST"
+			}
+		case "audio_transcriptions":
+			if v.Endpoint.STT != "" {
+				return v.Endpoint.STT, "POST"
+			}
+		case "audio_speech":
+			if v.Endpoint.TTS != "" {
+				return v.Endpoint.TTS, "POST"
 			}
 		}
 	case *V2Manifest:
-		if op, ok := v.Core.Endpoint.Endpoints[key]; ok {
-			return op.Path, upperOrPOST(op.Method)
+		if p, mth, ok := endpointFromMap(v.Endpoints, key); ok {
+			return p, mth
+		}
+		if p, mth, ok := endpointFromMap(v.Endpoint.Endpoints, key); ok {
+			return p, mth
+		}
+		if v.Core != nil {
+			if p, mth, ok := endpointFromMap(v.Core.Endpoint.Endpoints, key); ok {
+				return p, mth
+			}
+		}
+		switch key {
+		case "chat_completions":
+			if v.Endpoint.Chat != "" {
+				return v.Endpoint.Chat, "POST"
+			}
+		case "embeddings":
+			if v.Endpoint.Embeddings != "" {
+				return v.Endpoint.Embeddings, "POST"
+			}
+		case "audio_transcriptions":
+			if v.Endpoint.STT != "" {
+				return v.Endpoint.STT, "POST"
+			}
+		case "audio_speech":
+			if v.Endpoint.TTS != "" {
+				return v.Endpoint.TTS, "POST"
+			}
 		}
 	}
 	return fallback, "POST"
@@ -158,48 +235,109 @@ func EndpointFor(m any, key string, fallback string) (path string, method string
 func HasCapability(m any, name string) bool {
 	switch v := m.(type) {
 	case *V1Manifest:
+		target := normalizeCapabilityName(name)
 		for _, c := range v.Capabilities {
-			if c == name {
+			if normalizeCapabilityName(c) == target {
 				return true
+			}
+		}
+		if target == "chat" {
+			for _, c := range v.Capabilities {
+				if normalizeCapabilityName(c) == "text" {
+					return true
+				}
 			}
 		}
 		return false
 	case *V2Manifest:
-		switch name {
+		target := normalizeCapabilityName(name)
+		has := func(values []string, capName string) bool {
+			for _, value := range values {
+				if normalizeCapabilityName(value) == capName {
+					return true
+				}
+			}
+			return false
+		}
+		if has(v.Capabilities.Required, target) || has(v.Capabilities.Optional, target) {
+			return true
+		}
+		switch target {
 		case "chat":
-			return v.Capabilities.Chat != nil
-		case "streaming":
-			return v.Capabilities.Streaming != nil
-		case "tools":
-			return v.Capabilities.Tools != nil
-		case "vision":
-			return v.Capabilities.Vision != nil
-		case "audio":
-			return v.Capabilities.Audio != nil
-		case "video":
-			return v.Capabilities.Video != nil
-		case "embeddings":
-			return v.Capabilities.Embeddings != nil
-		case "batch":
-			return v.Capabilities.Batch != nil
-		case "stt":
-			return v.Capabilities.STT != nil
-		case "tts":
-			return v.Capabilities.TTS != nil
-		case "reranking":
-			return v.Capabilities.Reranking != nil
+			return has(v.Capabilities.Required, "text") || has(v.Capabilities.Optional, "text")
 		case "mcp":
-			return v.Capabilities.MCP != nil
-		case "computer_use":
-			return v.Capabilities.ComputerUse != nil
-		case "reasoning":
-			return v.Capabilities.Reasoning != nil
+			return has(v.Capabilities.Required, "mcp_client") || has(v.Capabilities.Optional, "mcp_client")
 		default:
 			return false
 		}
 	default:
 		return true
 	}
+}
+
+func endpointFromMap(endpoints map[string]any, key string) (string, string, bool) {
+	if len(endpoints) == 0 {
+		return "", "", false
+	}
+	raw, ok := endpoints[key]
+	if !ok {
+		return "", "", false
+	}
+	switch v := raw.(type) {
+	case string:
+		if v == "" {
+			return "", "", false
+		}
+		return v, "POST", true
+	case map[string]any:
+		path, _ := v["path"].(string)
+		method, _ := v["method"].(string)
+		if path == "" {
+			return "", "", false
+		}
+		return path, upperOrPOST(method), true
+	default:
+		return "", "", false
+	}
+}
+
+func normalizeCapabilityName(name string) string {
+	key := strings.ToLower(strings.TrimSpace(name))
+	switch key {
+	case "chat_completions", "text_completion":
+		return "chat"
+	case "rerank":
+		return "reranking"
+	default:
+		return key
+	}
+}
+
+func ValidateCapabilityProfile(profile *CapabilityProfile) error {
+	if profile == nil {
+		return nil
+	}
+	phase := strings.TrimSpace(profile.Phase)
+	if phase == "" {
+		return fmt.Errorf("capability_profile.phase is required")
+	}
+	hasIOS := len(profile.Inputs) > 0 || len(profile.Outcomes) > 0 || len(profile.Systems) > 0
+	switch phase {
+	case "ios_v1":
+		if len(profile.Process) > 0 || len(profile.Contract) > 0 {
+			return fmt.Errorf("ios_v1 does not allow process or contract")
+		}
+		if !hasIOS {
+			return fmt.Errorf("ios_v1 requires at least one of inputs/outcomes/systems")
+		}
+	case "iospc_v1":
+		if len(profile.Process) == 0 && len(profile.Contract) == 0 {
+			return fmt.Errorf("iospc_v1 requires process or contract")
+		}
+	default:
+		return fmt.Errorf("unsupported capability_profile phase: %s", phase)
+	}
+	return nil
 }
 
 func ClassifyError(m any, status int, providerCode, providerType string) (code string, ok bool) {

@@ -154,19 +154,42 @@ func runProtocolLoading(tc testCase, root string) error {
 	if path == "" {
 		return fmt.Errorf("manifest_path missing")
 	}
-	manifest, err := loadYAMLMap(filepath.Join(root, path))
-	if err != nil {
-		return err
-	}
-	valid := hasRequiredShape(manifest)
+	loader := protocol.NewLoader()
+	manifest, err := loader.LoadFile(filepath.Join(root, path))
+	valid := err == nil
 	expValid, _ := tc.Expected["valid"].(bool)
 	if valid != expValid {
-		return fmt.Errorf("valid expected %v got %v", expValid, valid)
+		return fmt.Errorf("valid expected %v got %v (err=%v)", expValid, valid, err)
 	}
-	if expValid {
-		if expID, ok := tc.Expected["provider_id"].(string); ok {
-			if got, _ := manifest["id"].(string); got != expID {
-				return fmt.Errorf("provider_id expected %s got %s", expID, got)
+	if !expValid {
+		if err == nil {
+			return fmt.Errorf("expected invalid manifest but loader succeeded")
+		}
+		return nil
+	}
+	if expID, ok := tc.Expected["provider_id"].(string); ok {
+		switch m := manifest.(type) {
+		case *protocol.V1Manifest:
+			if m.ID != expID {
+				return fmt.Errorf("provider_id expected %s got %s", expID, m.ID)
+			}
+		case *protocol.V2Manifest:
+			if m.ID != expID {
+				return fmt.Errorf("provider_id expected %s got %s", expID, m.ID)
+			}
+		default:
+			return fmt.Errorf("unexpected manifest type %T", manifest)
+		}
+	}
+	if expVersion, ok := tc.Expected["protocol_version"].(string); ok {
+		switch m := manifest.(type) {
+		case *protocol.V1Manifest:
+			if m.ProtocolVersion != expVersion {
+				return fmt.Errorf("protocol_version expected %s got %s", expVersion, m.ProtocolVersion)
+			}
+		case *protocol.V2Manifest:
+			if m.ProtocolVersion != expVersion {
+				return fmt.Errorf("protocol_version expected %s got %s", expVersion, m.ProtocolVersion)
 			}
 		}
 	}
