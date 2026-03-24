@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/hiddenpath/ai-lib-go/pkg/ailib"
+	"github.com/ailib-official/ai-lib-go/pkg/ailib"
 )
 
 func TestAdvancedCapabilitiesContract(t *testing.T) {

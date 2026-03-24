@@ -7,7 +7,7 @@
 
 ## 🎯 Design Philosophy
 
-`ai-lib-go` is the official Go runtime implementation for the [AI-Protocol](https://github.com/hiddenpath/ai-protocol) specification. It embodies the core design principle:
+`ai-lib-go` is the official Go runtime implementation for the [AI-Protocol](https://github.com/ailib-official/ai-protocol) specification. It embodies the core design principle:
 
 > **一切逻辑皆算子，一切配置皆协议** (All logic is operators, all configuration is protocol)
 
@@ -23,7 +23,7 @@ Unlike traditional adapter libraries that hardcode provider-specific logic, `ai-
 ### Installation
 
 ```bash
-go get github.com/hiddenpath/ai-lib-go
+go get github.com/ailib-official/ai-lib-go
 ```
 
 ### Basic Usage
@@ -36,7 +36,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hiddenpath/ai-lib-go/pkg/ailib"
+	"github.com/ailib-official/ai-lib-go/pkg/ailib"
 )
 
 func main() {
@@ -134,11 +134,11 @@ go test ./pkg/ailib/...
 COMPLIANCE_DIR=../ai-protocol/tests/compliance go test ./tests/compliance/...
 ```
 
-For details, see [CROSS_RUNTIME.md](https://github.com/hiddenpath/ai-protocol/blob/main/docs/CROSS_RUNTIME.md).
+For details, see [CROSS_RUNTIME.md](https://github.com/ailib-official/ai-protocol/blob/main/docs/CROSS_RUNTIME.md).
 
 ### Testing with ai-protocol-mock
 
-For integration tests without real API calls, use [ai-protocol-mock](https://github.com/hiddenpath/ai-protocol-mock):
+For integration tests without real API calls, use [ai-protocol-mock](https://github.com/ailib-official/ai-protocol-mock):
 
 ```bash
 # Start mock server (from ai-protocol-mock repo)

@@ -7,7 +7,7 @@
 
 ## 🎯 设计理念
 
-`ai-lib-go` 是 [AI-Protocol](https://github.com/hiddenpath/ai-protocol) 规范的**官方 Go 运行时**实现。它体现了核心设计原则：
+`ai-lib-go` 是 [AI-Protocol](https://github.com/ailib-official/ai-protocol) 规范的**官方 Go 运行时**实现。它体现了核心设计原则：
 
 > **一切逻辑皆算子，一切配置皆协议** (All logic is operators, all configuration is protocol)
 
@@ -23,7 +23,7 @@
 ### 安装
 
 ```bash
-go get github.com/hiddenpath/ai-lib-go
+go get github.com/ailib-official/ai-lib-go
 ```
 
 ### 基础用法
@@ -36,7 +36,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/hiddenpath/ai-lib-go/pkg/ailib"
+	"github.com/ailib-official/ai-lib-go/pkg/ailib"
 )
 
 func main() {
@@ -134,11 +134,11 @@ go test ./pkg/ailib/...
 COMPLIANCE_DIR=../ai-protocol/tests/compliance go test ./tests/compliance/...
 ```
 
-详见 [CROSS_RUNTIME.md](https://github.com/hiddenpath/ai-protocol/blob/main/docs/CROSS_RUNTIME.md)。
+详见 [CROSS_RUNTIME.md](https://github.com/ailib-official/ai-protocol/blob/main/docs/CROSS_RUNTIME.md)。
 
 ### 使用 ai-protocol-mock 测试
 
-无需真实 API 调用的集成测试，可使用 [ai-protocol-mock](https://github.com/hiddenpath/ai-protocol-mock)：
+无需真实 API 调用的集成测试，可使用 [ai-protocol-mock](https://github.com/ailib-official/ai-protocol-mock)：
 
 ```bash
 # 启动 mock 服务（在 ai-protocol-mock 仓库中）

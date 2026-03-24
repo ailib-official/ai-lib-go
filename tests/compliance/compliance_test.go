@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hiddenpath/ai-lib-go/internal/protocol"
-	"github.com/hiddenpath/ai-lib-go/pkg/ailib"
+	"github.com/ailib-official/ai-lib-go/internal/protocol"
+	"github.com/ailib-official/ai-lib-go/pkg/ailib"
 	"gopkg.in/yaml.v3"
 )
 

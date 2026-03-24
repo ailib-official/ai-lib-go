@@ -11,9 +11,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hiddenpath/ai-lib-go/internal/protocol"
-	"github.com/hiddenpath/ai-lib-go/internal/resilience"
-	"github.com/hiddenpath/ai-lib-go/internal/stream"
+	"github.com/ailib-official/ai-lib-go/internal/protocol"
+	"github.com/ailib-official/ai-lib-go/internal/resilience"
+	"github.com/ailib-official/ai-lib-go/internal/stream"
 )
 
 type client struct {
