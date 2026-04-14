@@ -8,17 +8,18 @@ import (
 )
 
 type V1Manifest struct {
-	ID              string           `yaml:"id" json:"id"`
-	ProtocolVersion string           `yaml:"protocol_version" json:"protocol_version"`
-	BaseURL         string           `yaml:"base_url" json:"base_url"`
-	APIFormat       string           `yaml:"api_format" json:"api_format"`
-	Capabilities    []string         `yaml:"capabilities" json:"capabilities"`
-	ErrorClass      ErrorClass       `yaml:"error_classification" json:"error_classification"`
-	RetryPolicy     RetryPolicy      `yaml:"retry_policy" json:"retry_policy"`
-	Auth            *V1Auth          `yaml:"auth" json:"auth"`
-	Endpoint        EndpointConfig   `yaml:"endpoint" json:"endpoint"`
-	Endpoints       map[string]any   `yaml:"endpoints" json:"endpoints"`
-	Streaming       *StreamingConfig `yaml:"streaming" json:"streaming"`
+	ID              string               `yaml:"id" json:"id"`
+	ProtocolVersion string               `yaml:"protocol_version" json:"protocol_version"`
+	BaseURL         string               `yaml:"base_url" json:"base_url"`
+	APIFormat       string               `yaml:"api_format" json:"api_format"`
+	Capabilities    []string             `yaml:"capabilities" json:"capabilities"`
+	ErrorClass      ErrorClass           `yaml:"error_classification" json:"error_classification"`
+	RetryPolicy     RetryPolicy          `yaml:"retry_policy" json:"retry_policy"`
+	Auth            *V1Auth              `yaml:"auth" json:"auth"`
+	Endpoint        EndpointConfig       `yaml:"endpoint" json:"endpoint"`
+	Endpoints       map[string]any       `yaml:"endpoints" json:"endpoints"`
+	Streaming       *StreamingConfig     `yaml:"streaming" json:"streaming"`
+	ResponsePaths   *ResponsePathsConfig `yaml:"response_paths" json:"response_paths"`
 }
 
 type StreamingConfig struct {
@@ -49,15 +50,16 @@ type EndpointConfig struct {
 }
 
 type V2Manifest struct {
-	ID                string             `yaml:"id" json:"id"`
-	ProtocolVersion   string             `yaml:"protocol_version" json:"protocol_version"`
-	Endpoint          EndpointConfig     `yaml:"endpoint" json:"endpoint"`
-	Endpoints         map[string]any     `yaml:"endpoints" json:"endpoints"`
-	ErrorClass        ErrorClass         `yaml:"error_classification" json:"error_classification"`
-	RetryPolicy       RetryPolicy        `yaml:"retry_policy" json:"retry_policy"`
-	Capabilities      V2Caps             `yaml:"capabilities" json:"capabilities"`
-	CapabilityProfile *CapabilityProfile `yaml:"capability_profile" json:"capability_profile"`
-	Streaming         *StreamingConfig   `yaml:"streaming" json:"streaming"`
+	ID                string               `yaml:"id" json:"id"`
+	ProtocolVersion   string               `yaml:"protocol_version" json:"protocol_version"`
+	Endpoint          EndpointConfig       `yaml:"endpoint" json:"endpoint"`
+	Endpoints         map[string]any       `yaml:"endpoints" json:"endpoints"`
+	ErrorClass        ErrorClass           `yaml:"error_classification" json:"error_classification"`
+	RetryPolicy       RetryPolicy          `yaml:"retry_policy" json:"retry_policy"`
+	Capabilities      V2Caps               `yaml:"capabilities" json:"capabilities"`
+	CapabilityProfile *CapabilityProfile   `yaml:"capability_profile" json:"capability_profile"`
+	Streaming         *StreamingConfig     `yaml:"streaming" json:"streaming"`
+	ResponsePaths     *ResponsePathsConfig `yaml:"response_paths" json:"response_paths"`
 	// Backward-compatible alias for old local fixtures.
 	Core *V2CoreLegacy `yaml:"core" json:"core"`
 }

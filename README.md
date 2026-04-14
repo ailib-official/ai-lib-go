@@ -59,6 +59,12 @@ func main() {
 }
 ```
 
+### HTTP and proxies (aligned with ai-lib-rust)
+
+Rust `ai-lib-core` builds HTTP clients with optional proxy routes from, in order: `AI_PROXY_URL`, `HTTPS_PROXY`, `HTTP_PROXY`. Use `NO_PROXY` (and where supported, `AI_PROXY_NO_PROXY`) so provider endpoints that must be direct are excluded when a corporate proxy is set.
+
+`ai-lib-go` uses the standard library `http.Client` you pass into `NewClientBuilder`; configure `Transport.Proxy` or environment-based proxies in your process the same way you would for any Go service.
+
 ### Streaming
 
 ```go

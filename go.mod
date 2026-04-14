@@ -1,4 +1,4 @@
-module github.com/hiddenpath/ai-lib-go
+module github.com/ailib-official/ai-lib-go
 
 go 1.21
 

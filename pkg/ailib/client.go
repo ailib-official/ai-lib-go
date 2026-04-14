@@ -411,7 +411,20 @@ func (c *client) execute(req *http.Request, out any) error {
 		if out == nil {
 			return nil
 		}
-		return json.NewDecoder(resp.Body).Decode(out)
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		if err := json.Unmarshal(body, out); err != nil {
+			return err
+		}
+		if cr, ok := out.(*ChatResponse); ok {
+			var raw map[string]any
+			if err := json.Unmarshal(body, &raw); err == nil {
+				EnrichNonstreamChatResponse(c.manifest, raw, cr)
+			}
+		}
+		return nil
 	}, isRetryableErr)
 }
 

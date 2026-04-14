@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- Non-streaming `Client.Chat` response enrichment: manifest `response_paths` with OpenAI-style fallbacks via `EnrichNonstreamChatResponse` and `internal/protocol` JSON-path helpers (Rust/Python parity).
+
 ## [v0.5.1] - 2026-03-12
 
 ### Fixed
