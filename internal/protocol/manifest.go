@@ -458,3 +458,65 @@ func StreamingDecoderFormat(m any) string {
 	}
 	return "openai_sse"
 }
+
+// GetFeatureFlags returns feature flags from a V2 manifest.
+func (m *V2Manifest) GetFeatureFlags() map[string]bool {
+	if m.Capabilities.FeatureFlags == nil {
+		return make(map[string]bool)
+	}
+	return m.Capabilities.FeatureFlags
+}
+
+// IsFeatureEnabled checks if a feature flag is enabled.
+func (m *V2Manifest) IsFeatureEnabled(flag string) bool {
+	flags := m.GetFeatureFlags()
+	return flags[flag]
+}
+
+// GetAllCapabilities returns all capabilities (required + optional).
+func (m *V2Manifest) GetAllCapabilities() []string {
+	caps := make([]string, 0)
+	caps = append(caps, m.Capabilities.Required...)
+	caps = append(caps, m.Capabilities.Optional...)
+	return caps
+}
+
+// HasCapability checks if a capability is declared.
+func (m *V2Manifest) HasCapability(capability string) bool {
+	for _, c := range m.Capabilities.Required {
+		if c == capability {
+			return true
+		}
+	}
+	for _, c := range m.Capabilities.Optional {
+		if c == capability {
+			return true
+		}
+	}
+	return false
+}
+
+// GetFeatureFlags returns feature flags from a V1 manifest (empty, as V1 doesn't have feature flags).
+func (m *V1Manifest) GetFeatureFlags() map[string]bool {
+	return make(map[string]bool)
+}
+
+// IsFeatureEnabled checks if a feature flag is enabled in V1 (always false).
+func (m *V1Manifest) IsFeatureEnabled(flag string) bool {
+	return false
+}
+
+// GetAllCapabilities returns all capabilities for V1.
+func (m *V1Manifest) GetAllCapabilities() []string {
+	return m.Capabilities
+}
+
+// HasCapability checks if a capability is declared in V1.
+func (m *V1Manifest) HasCapability(capability string) bool {
+	for _, c := range m.Capabilities {
+		if c == capability {
+			return true
+		}
+	}
+	return false
+}

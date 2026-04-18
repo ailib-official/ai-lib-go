@@ -70,16 +70,26 @@ type Choice struct {
 }
 
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens      int `json:"prompt_tokens"`
+	CompletionTokens  int `json:"completion_tokens"`
+	TotalTokens       int `json:"total_tokens"`
+	ReasoningTokens   int `json:"reasoning_tokens,omitempty"`
+	CacheReadTokens   int `json:"cache_read_tokens,omitempty"`
+	CacheWriteTokens  int `json:"cache_write_tokens,omitempty"`
 }
 
 type StreamingEvent struct {
 	Type         string      `json:"type"`
 	Delta        string      `json:"delta,omitempty"`
+	Thinking     string      `json:"thinking,omitempty"`
 	FinishReason string      `json:"finish_reason,omitempty"`
 	ToolCall     any         `json:"tool_call,omitempty"`
+	ToolCallID   string      `json:"tool_call_id,omitempty"`
+	ToolName     string      `json:"tool_name,omitempty"`
+	Arguments    string      `json:"arguments,omitempty"`
+	Index        *int        `json:"index,omitempty"`
+	IsComplete   bool        `json:"is_complete,omitempty"`
+	Usage        *Usage      `json:"usage,omitempty"`
 	Error        *EventError `json:"error,omitempty"`
 }
 
