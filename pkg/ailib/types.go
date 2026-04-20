@@ -70,12 +70,12 @@ type Choice struct {
 }
 
 type Usage struct {
-	PromptTokens      int `json:"prompt_tokens"`
-	CompletionTokens  int `json:"completion_tokens"`
-	TotalTokens       int `json:"total_tokens"`
-	ReasoningTokens   int `json:"reasoning_tokens,omitempty"`
-	CacheReadTokens   int `json:"cache_read_tokens,omitempty"`
-	CacheWriteTokens  int `json:"cache_write_tokens,omitempty"`
+	PromptTokens        int `json:"prompt_tokens"`
+	CompletionTokens    int `json:"completion_tokens"`
+	TotalTokens         int `json:"total_tokens"`
+	ReasoningTokens     int `json:"reasoning_tokens,omitempty"`
+	CacheReadTokens     int `json:"cache_read_tokens,omitempty"`
+	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
 }
 
 type StreamingEvent struct {

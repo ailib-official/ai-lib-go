@@ -368,26 +368,62 @@ func (a *ToolCallAccumulator) Clear() {
 
 // Helper functions
 
+// parseUsage normalizes provider-specific usage payloads into ailib.Usage.
+// Supports:
+//   - OpenAI flat fields (prompt_tokens/completion_tokens/total_tokens) plus
+//     completion_tokens_details.reasoning_tokens and prompt_tokens_details.cached_tokens.
+//   - Anthropic input_tokens/output_tokens plus cache_creation_input_tokens /
+//     cache_read_input_tokens.
+//   - Canonical ai-protocol extended fields (reasoning_tokens, cache_read_tokens,
+//     cache_creation_tokens) and legacy cache_write_tokens alias.
+// Returns nil when no numeric fields could be populated so callers can distinguish
+// absence from all-zero usage.
 func parseUsage(data map[string]any) *ailib.Usage {
+	if len(data) == 0 {
+		return nil
+	}
 	usage := &ailib.Usage{}
-	if v, ok := data["prompt_tokens"].(float64); ok {
-		usage.PromptTokens = int(v)
+	populated := false
+	setInt := func(dst *int, keys ...string) {
+		for _, k := range keys {
+			if v, ok := data[k].(float64); ok {
+				*dst = int(v)
+				populated = true
+				return
+			}
+		}
 	}
-	if v, ok := data["completion_tokens"].(float64); ok {
-		usage.CompletionTokens = int(v)
+
+	setInt(&usage.PromptTokens, "prompt_tokens", "input_tokens")
+	setInt(&usage.CompletionTokens, "completion_tokens", "output_tokens")
+	setInt(&usage.TotalTokens, "total_tokens")
+	setInt(&usage.ReasoningTokens, "reasoning_tokens")
+	setInt(&usage.CacheReadTokens, "cache_read_tokens", "cache_read_input_tokens")
+	setInt(&usage.CacheCreationTokens,
+		"cache_creation_tokens",
+		"cache_creation_input_tokens",
+		"cache_write_tokens",
+	)
+
+	// OpenAI extended detail blocks
+	if details, ok := data["completion_tokens_details"].(map[string]any); ok {
+		if v, ok := details["reasoning_tokens"].(float64); ok && usage.ReasoningTokens == 0 {
+			usage.ReasoningTokens = int(v)
+			populated = true
+		}
 	}
-	if v, ok := data["total_tokens"].(float64); ok {
-		usage.TotalTokens = int(v)
+	if details, ok := data["prompt_tokens_details"].(map[string]any); ok {
+		if v, ok := details["cached_tokens"].(float64); ok && usage.CacheReadTokens == 0 {
+			usage.CacheReadTokens = int(v)
+			populated = true
+		}
 	}
-	// Extended fields for generative models
-	if v, ok := data["reasoning_tokens"].(float64); ok {
-		usage.ReasoningTokens = int(v)
+
+	if !populated {
+		return nil
 	}
-	if v, ok := data["cache_read_tokens"].(float64); ok {
-		usage.CacheReadTokens = int(v)
-	}
-	if v, ok := data["cache_write_tokens"].(float64); ok {
-		usage.CacheWriteTokens = int(v)
+	if usage.TotalTokens == 0 && (usage.PromptTokens > 0 || usage.CompletionTokens > 0) {
+		usage.TotalTokens = usage.PromptTokens + usage.CompletionTokens
 	}
 	return usage
 }

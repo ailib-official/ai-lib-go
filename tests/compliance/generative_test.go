@@ -103,6 +103,70 @@ func TestGen002TokenUsage(t *testing.T) {
 	}
 }
 
+// TestGen002UsageNormalization asserts parseUsage lifts provider-specific usage
+// shapes (OpenAI completion_tokens_details, Anthropic input_tokens + cache_*_input_tokens)
+// into the unified ailib.Usage (ARCH-003 parity with ai-lib-ts normalizeUsage).
+func TestGen002UsageNormalization(t *testing.T) {
+	// Simulate feeding through streaming mapper by crafting a chunk whose
+	// `usage` field contains OpenAI-style nested details.
+	openaiChunk := `{"choices":[{"delta":{}}],"usage":{"prompt_tokens":10,"completion_tokens":5,"total_tokens":15,"prompt_tokens_details":{"cached_tokens":4},"completion_tokens_details":{"reasoning_tokens":3}}}`
+	data, err := streaming.DecodeFrame(openaiChunk)
+	if err != nil {
+		t.Fatalf("decode openai chunk: %v", err)
+	}
+	events := streaming.NewOpenAIEventMapper().Map(data)
+	var u *ailib.Usage
+	for _, e := range events {
+		if e.Usage != nil {
+			u = e.Usage
+		}
+	}
+	if u == nil {
+		t.Fatal("expected Metadata event with usage")
+	}
+	if u.PromptTokens != 10 || u.CompletionTokens != 5 || u.TotalTokens != 15 {
+		t.Errorf("flat tokens wrong: %+v", u)
+	}
+	if u.ReasoningTokens != 3 {
+		t.Errorf("expected reasoning_tokens=3 lifted from completion_tokens_details, got %d", u.ReasoningTokens)
+	}
+	if u.CacheReadTokens != 4 {
+		t.Errorf("expected cache_read_tokens=4 lifted from prompt_tokens_details.cached_tokens, got %d", u.CacheReadTokens)
+	}
+
+	// Anthropic message_delta with input_tokens/output_tokens + cache aliases
+	anthChunk := `{"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"input_tokens":200,"output_tokens":50,"cache_creation_input_tokens":120,"cache_read_input_tokens":80}}`
+	data2, err := streaming.DecodeFrame(anthChunk)
+	if err != nil {
+		t.Fatalf("decode anthropic chunk: %v", err)
+	}
+	events2 := streaming.NewAnthropicEventMapper().Map(data2)
+	var u2 *ailib.Usage
+	for _, e := range events2 {
+		if e.Usage != nil {
+			u2 = e.Usage
+		}
+	}
+	if u2 == nil {
+		t.Fatal("expected Metadata event with usage (anthropic)")
+	}
+	if u2.PromptTokens != 200 {
+		t.Errorf("expected prompt_tokens=200 from input_tokens, got %d", u2.PromptTokens)
+	}
+	if u2.CompletionTokens != 50 {
+		t.Errorf("expected completion_tokens=50 from output_tokens, got %d", u2.CompletionTokens)
+	}
+	if u2.CacheCreationTokens != 120 {
+		t.Errorf("expected cache_creation_tokens=120, got %d", u2.CacheCreationTokens)
+	}
+	if u2.CacheReadTokens != 80 {
+		t.Errorf("expected cache_read_tokens=80, got %d", u2.CacheReadTokens)
+	}
+	if u2.TotalTokens != 250 {
+		t.Errorf("expected total_tokens=prompt+completion=250 when absent, got %d", u2.TotalTokens)
+	}
+}
+
 // TestGen003StructuredOutput tests JSON mode (gen-003)
 func TestGen003StructuredOutput(t *testing.T) {
 	opts := &ailib.ChatOptions{
@@ -165,49 +229,79 @@ func TestGen004StreamingToolCall(t *testing.T) {
 
 	// Check accumulated tool calls
 	toolCalls := accumulator.GetAll()
-	if len(toolCalls) == 0 {
-		t.Error("expected at least one accumulated tool call")
+	if len(toolCalls) != 1 {
+		t.Fatalf("expected exactly one accumulated tool call, got %d", len(toolCalls))
 	}
 
-	// Check arguments are accumulated
-	for _, tc := range toolCalls {
-		if tc["id"] == "call_abc" {
-			args := tc["arguments"].(string)
-			if args == "" {
-				t.Error("expected non-empty arguments")
-			}
-		}
+	tc := toolCalls[0]
+	if tc["id"] != "call_abc" {
+		t.Errorf("expected id=call_abc, got %v", tc["id"])
+	}
+	if tc["name"] != "get_weather" {
+		t.Errorf("expected name=get_weather, got %v", tc["name"])
+	}
+	args, ok := tc["arguments"].(string)
+	if !ok {
+		t.Fatalf("arguments should be string, got %T", tc["arguments"])
+	}
+	// Partial chunks concatenate into a complete JSON payload
+	if args != `{"location": "SF"}` {
+		t.Errorf("expected concatenated arguments=%q, got %q", `{"location": "SF"}`, args)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(args), &parsed); err != nil {
+		t.Fatalf("accumulated args should parse as JSON: %v", err)
+	}
+	if parsed["location"] != "SF" {
+		t.Errorf("expected parsed location=SF, got %v", parsed["location"])
 	}
 }
 
 // TestGen005ContextOverflow tests context window error classification (gen-005)
+// using the manifest-driven protocol.ClassifyError classifier.
 func TestGen005ContextOverflow(t *testing.T) {
-	// This tests error classification logic
-	// In Go, error classification is handled by the client implementation
-	// For now, we just verify the error structure
-
-	httpStatus := 400
-	responseBody := map[string]any{
-		"error": map[string]any{
-			"message": "This model's maximum context length is 128000 tokens.",
-			"type":    "invalid_request_error",
-			"code":    "context_length_exceeded",
+	manifest := &protocol.V2Manifest{
+		ID:              "mock",
+		ProtocolVersion: "2.0",
+		ErrorClass: protocol.ErrorClass{
+			ByHTTPStatus: map[string]string{
+				"429": "rate_limited",
+				"413": "request_too_large",
+				"401": "authentication",
+			},
+			ByErrorCode: map[string]string{
+				"context_length_exceeded": "request_too_large",
+			},
 		},
 	}
 
-	// Verify error code exists
-	if responseBody["error"] == nil {
-		t.Fatal("expected error object")
+	// by_error_code path — context_length_exceeded → E1005
+	code, ok := protocol.ClassifyError(manifest, 400, "context_length_exceeded", "invalid_request_error")
+	if !ok {
+		t.Fatal("expected classification to match by_error_code")
+	}
+	if code != "E1005" {
+		t.Errorf("expected E1005 (REQUEST_TOO_LARGE), got %s", code)
 	}
 
-	errObj := responseBody["error"].(map[string]any)
-	if errObj["code"] != "context_length_exceeded" {
-		t.Errorf("expected code=context_length_exceeded, got %v", errObj["code"])
+	// by_http_status path — 429 → rate_limited → E2001
+	code, ok = protocol.ClassifyError(manifest, 429, "", "")
+	if !ok || code != "E2001" {
+		t.Errorf("expected E2001 via by_http_status, got %q ok=%v", code, ok)
 	}
 
-	// Error classification: context_length_exceeded → E1005
-	// (Error classification implementation is in client code)
-	_ = httpStatus
+	// Unmapped status returns !ok so caller can fall back to heuristics.
+	if _, ok := protocol.ClassifyError(manifest, 599, "", ""); ok {
+		t.Error("expected unmapped status to return ok=false")
+	}
+
+	// Manifest without error_classification cannot classify.
+	empty := &protocol.V2Manifest{ID: "none", ProtocolVersion: "2.0"}
+	if _, ok := protocol.ClassifyError(empty, 400, "context_length_exceeded", ""); ok {
+		// Empty ErrorClass struct still returns ok=true from errorClass but no mapping hits;
+		// ensure we don't accidentally produce a code.
+		t.Error("expected empty error_classification to produce no code")
+	}
 }
 
 // TestGen006ReasoningStreaming tests thinking block streaming (gen-006)
