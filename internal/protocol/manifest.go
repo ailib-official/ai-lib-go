@@ -5,6 +5,8 @@ package protocol
 import (
 	"fmt"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 )
 
 type V1Manifest struct {
@@ -12,7 +14,7 @@ type V1Manifest struct {
 	ProtocolVersion string               `yaml:"protocol_version" json:"protocol_version"`
 	BaseURL         string               `yaml:"base_url" json:"base_url"`
 	APIFormat       string               `yaml:"api_format" json:"api_format"`
-	Capabilities    []string             `yaml:"capabilities" json:"capabilities"`
+	Capabilities    CapabilityList       `yaml:"capabilities" json:"capabilities"`
 	ErrorClass      ErrorClass           `yaml:"error_classification" json:"error_classification"`
 	RetryPolicy     RetryPolicy          `yaml:"retry_policy" json:"retry_policy"`
 	Auth            *V1Auth              `yaml:"auth" json:"auth"`
@@ -31,10 +33,39 @@ type DecoderConfig struct {
 	Strategy string `yaml:"strategy" json:"strategy"`
 }
 
+type CapabilityList []string
+
+func (c *CapabilityList) UnmarshalYAML(value *yaml.Node) error {
+	switch value.Kind {
+	case yaml.SequenceNode:
+		var out []string
+		if err := value.Decode(&out); err != nil {
+			return err
+		}
+		*c = out
+	case yaml.MappingNode:
+		var structured V2Caps
+		if err := value.Decode(&structured); err != nil {
+			return err
+		}
+		out := append([]string{}, structured.Required...)
+		out = append(out, structured.Optional...)
+		*c = out
+	default:
+		*c = nil
+	}
+	return nil
+}
+
 type V1Auth struct {
-	Type   string `yaml:"type" json:"type"`
-	Header string `yaml:"header" json:"header"`
-	Prefix string `yaml:"prefix" json:"prefix"`
+	Type       string `yaml:"type" json:"type"`
+	Header     string `yaml:"header" json:"header"`
+	HeaderName string `yaml:"header_name" json:"header_name"`
+	Prefix     string `yaml:"prefix" json:"prefix"`
+	TokenEnv   string `yaml:"token_env" json:"token_env"`
+	KeyEnv     string `yaml:"key_env" json:"key_env"`
+	EnvVar     string `yaml:"env_var" json:"env_var"`
+	ParamName  string `yaml:"param_name" json:"param_name"`
 }
 
 type EndpointConfig struct {
@@ -70,11 +101,15 @@ type V2CoreLegacy struct {
 }
 
 type V2Auth struct {
-	Type     string `yaml:"type" json:"type"`
-	Header   string `yaml:"header" json:"header"`
-	Key      string `yaml:"key" json:"key"`
-	Prefix   string `yaml:"prefix" json:"prefix"`
-	TokenEnv string `yaml:"token_env" json:"token_env"`
+	Type       string `yaml:"type" json:"type"`
+	Header     string `yaml:"header" json:"header"`
+	HeaderName string `yaml:"header_name" json:"header_name"`
+	Key        string `yaml:"key" json:"key"`
+	Prefix     string `yaml:"prefix" json:"prefix"`
+	TokenEnv   string `yaml:"token_env" json:"token_env"`
+	KeyEnv     string `yaml:"key_env" json:"key_env"`
+	EnvVar     string `yaml:"env_var" json:"env_var"`
+	ParamName  string `yaml:"param_name" json:"param_name"`
 }
 
 type V2Caps struct {
@@ -123,57 +158,19 @@ func BaseURL(m any) (string, error) {
 }
 
 func AuthHeader(m any) (name string, valuePrefix string, err error) {
-	switch v := m.(type) {
-	case *V1Manifest:
-		h := "Authorization"
-		p := ""
-		if v.Endpoint.Auth != nil {
-			if v.Endpoint.Auth.Header != "" {
-				h = v.Endpoint.Auth.Header
-			} else if v.Endpoint.Auth.Key != "" {
-				h = v.Endpoint.Auth.Key
-			}
-			p = v.Endpoint.Auth.Prefix
-			if p == "" && v.Endpoint.Auth.Type == "bearer" {
-				p = "Bearer "
-			}
-		}
-		if v.Auth != nil {
-			if v.Auth.Header != "" {
-				h = v.Auth.Header
-			}
-			if p == "" {
-				p = v.Auth.Prefix
-			}
-			if p == "" && v.Auth.Type == "bearer" {
-				p = "Bearer "
-			}
-		}
-		return h, p, nil
-	case *V2Manifest:
-		auth := v.Endpoint.Auth
-		if auth == nil && v.Core != nil {
-			auth = &v.Core.Auth
-		}
-		h := "Authorization"
-		if auth != nil {
-			if auth.Header != "" {
-				h = auth.Header
-			} else if auth.Key != "" {
-				h = auth.Key
-			}
-		}
-		p := ""
-		if auth != nil {
-			p = auth.Prefix
-			if p == "" && auth.Type == "bearer" {
-				p = "Bearer "
-			}
-		}
-		return h, p, nil
-	default:
+	if m == nil {
 		return "", "", fmt.Errorf("unsupported manifest type: %T", m)
 	}
+	auth, ok := PrimaryAuth(m)
+	if !ok {
+		return "Authorization", "Bearer ", nil
+	}
+	h := firstNonEmpty(auth.Header, "Authorization")
+	p := auth.Prefix
+	if p == "" && auth.Type == "bearer" {
+		p = "Bearer "
+	}
+	return h, p, nil
 }
 
 func EndpointFor(m any, key string, fallback string) (path string, method string) {
@@ -508,7 +505,7 @@ func (m *V1Manifest) IsFeatureEnabled(flag string) bool {
 
 // GetAllCapabilities returns all capabilities for V1.
 func (m *V1Manifest) GetAllCapabilities() []string {
-	return m.Capabilities
+	return []string(m.Capabilities)
 }
 
 // HasCapability checks if a capability is declared in V1.

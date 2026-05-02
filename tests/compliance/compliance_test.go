@@ -146,6 +146,14 @@ func TestAdvancedCapabilitiesCompliance(t *testing.T) {
 	runComplianceDir(t, root, "cases/07-advanced-capabilities", runAdvancedCapabilities)
 }
 
+func TestCredentialChainCompliance(t *testing.T) {
+	root := complianceDir()
+	if root == "" {
+		t.Fatalf("compliance dir not found")
+	}
+	runComplianceDir(t, root, "cases/09-credential-resolution", runCredentialChain)
+}
+
 func runProtocolLoading(tc testCase, root string) error {
 	if tc.Input["type"] != "protocol_loading" {
 		return nil
@@ -334,6 +342,96 @@ func runAdvancedCapabilities(tc testCase, root string) error {
 	default:
 		return nil
 	}
+}
+
+func runCredentialChain(tc testCase, root string) error {
+	switch tc.Input["type"] {
+	case "credential_resolution", "auth_attachment":
+	default:
+		return nil
+	}
+	if target, _ := tc.Input["runtime_target"].(string); target == "wasm32-wasip1" {
+		return nil
+	}
+	setupPath, _ := tc.Setup["manifest_path"].(string)
+	if setupPath == "" {
+		return fmt.Errorf("manifest_path missing")
+	}
+	restore := patchEnv(mapStringString(tc.Setup["env"]))
+	defer restore()
+
+	loader := protocol.NewLoader()
+	manifest, err := loader.LoadFile(filepath.Join(root, setupPath))
+	if err != nil {
+		return err
+	}
+	credential := protocol.ResolveCredential(manifest, asString(tc.Input["explicit_credential"]))
+	if exp, ok := tc.Expected["status"].(string); ok {
+		got := "missing"
+		if credential.Value != "" {
+			got = "available"
+		}
+		if got != exp {
+			return fmt.Errorf("status expected %s got %s", exp, got)
+		}
+	}
+	if exp, ok := tc.Expected["source_kind"].(string); ok && string(credential.SourceKind) != exp {
+		return fmt.Errorf("source_kind expected %s got %s", exp, credential.SourceKind)
+	}
+	if exp, ok := tc.Expected["source_name"].(string); ok && credential.SourceName != exp {
+		return fmt.Errorf("source_name expected %s got %s", exp, credential.SourceName)
+	}
+	if _, ok := tc.Expected["source_name"]; ok && tc.Expected["source_name"] == nil && credential.SourceName != "" {
+		return fmt.Errorf("source_name expected nil got %s", credential.SourceName)
+	}
+	if exp, ok := tc.Expected["required"].([]any); ok && !stringSliceEqual(credential.RequiredEnvVars, stringSlice(exp)) {
+		return fmt.Errorf("required expected %v got %v", stringSlice(exp), credential.RequiredEnvVars)
+	}
+	if exp, ok := tc.Expected["conventional_fallbacks"].([]any); ok && !stringSliceEqual(credential.ConventionalEnvVars, stringSlice(exp)) {
+		return fmt.Errorf("conventional_fallbacks expected %v got %v", stringSlice(exp), credential.ConventionalEnvVars)
+	}
+
+	metadata := protocol.BuildAuthMetadata(manifest, credential, true)
+	if tc.Input["type"] == "auth_attachment" {
+		if !stringMapEqual(metadata.Headers, mapStringString(tc.Expected["headers"])) {
+			return fmt.Errorf("headers expected %v got %v", tc.Expected["headers"], metadata.Headers)
+		}
+		if !stringMapEqual(metadata.QueryParams, mapStringString(tc.Expected["query_params"])) {
+			return fmt.Errorf("query_params expected %v got %v", tc.Expected["query_params"], metadata.QueryParams)
+		}
+	}
+	diagnostic := protocol.CredentialDiagnostic(manifest, credential)
+	for _, needle := range stringSliceFromAny(tc.Expected["diagnostic_contains"]) {
+		if !strings.Contains(diagnostic, needle) {
+			return fmt.Errorf("diagnostic expected to contain %q: %s", needle, diagnostic)
+		}
+	}
+	for _, needle := range stringSliceFromAny(tc.Expected["diagnostic_must_not_contain"]) {
+		if strings.Contains(diagnostic, needle) {
+			return fmt.Errorf("diagnostic must not contain %q", needle)
+		}
+	}
+	if shadowed, ok := protocol.ShadowedAuth(manifest); ok {
+		shadowedText := fmt.Sprintf("%+v", shadowed)
+		for _, needle := range stringSliceFromAny(tc.Expected["diagnostic_should_mention"]) {
+			if !strings.Contains(shadowedText, needle) {
+				return fmt.Errorf("shadowed diagnostic expected to mention %q", needle)
+			}
+		}
+	}
+	publicText := fmt.Sprintf("%+v %+v %s", protocol.ResolvedCredential{
+		SourceKind:          credential.SourceKind,
+		SourceName:          credential.SourceName,
+		RequiredEnvVars:     credential.RequiredEnvVars,
+		ConventionalEnvVars: credential.ConventionalEnvVars,
+		Value:               protocol.RedactedCredential,
+	}, metadata, diagnostic)
+	for _, secret := range stringSliceFromAny(tc.Expected["must_not_contain"]) {
+		if strings.Contains(publicText, secret) {
+			return fmt.Errorf("public text must not contain secret %q", secret)
+		}
+	}
+	return nil
 }
 
 func runCapabilityGuard(tc testCase) error {
@@ -736,4 +834,92 @@ func jsonDeepEqual(a, b any) bool {
 	ba, _ := json.Marshal(a)
 	bb, _ := json.Marshal(b)
 	return string(ba) == string(bb)
+}
+
+func patchEnv(env map[string]string) func() {
+	keys := map[string]bool{
+		"REPLICATE_API_TOKEN": true,
+		"REPLICATE_API_KEY":   true,
+		"HEADERAUTH_TOKEN":    true,
+		"QUERYAUTH_API_KEY":   true,
+		"DUALAUTH_API_TOKEN":  true,
+		"DUALAUTH_LEGACY_KEY": true,
+	}
+	for k := range env {
+		keys[k] = true
+	}
+	previous := map[string]*string{}
+	for k := range keys {
+		if v, ok := os.LookupEnv(k); ok {
+			value := v
+			previous[k] = &value
+		} else {
+			previous[k] = nil
+		}
+		os.Unsetenv(k)
+	}
+	for k, v := range env {
+		os.Setenv(k, v)
+	}
+	return func() {
+		for k, v := range previous {
+			if v == nil {
+				os.Unsetenv(k)
+			} else {
+				os.Setenv(k, *v)
+			}
+		}
+	}
+}
+
+func mapStringString(v any) map[string]string {
+	out := map[string]string{}
+	switch m := v.(type) {
+	case map[string]any:
+		for k, val := range m {
+			out[k] = asString(val)
+		}
+	case map[string]string:
+		for k, val := range m {
+			out[k] = val
+		}
+	}
+	return out
+}
+
+func stringSlice(values []any) []string {
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		out = append(out, asString(value))
+	}
+	return out
+}
+
+func stringSliceFromAny(v any) []string {
+	values, _ := v.([]any)
+	return stringSlice(values)
+}
+
+func stringSliceEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func stringMapEqual(a, b map[string]string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for k, v := range a {
+		if b[k] != v {
+			return false
+		}
+	}
+	return true
 }
