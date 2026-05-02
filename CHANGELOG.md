@@ -4,6 +4,7 @@
 
 ### Added
 
+- **PT-074 credential chain parity:** protocol credentials now resolve through explicit overrides, `endpoint.auth` / top-level `auth` env declarations, conventional `<PROVIDER_ID>_API_KEY` fallback, and shared credential-chain compliance fixtures.
 - Non-streaming `Client.Chat` response enrichment: manifest `response_paths` with OpenAI-style fallbacks via `EnrichNonstreamChatResponse` and `internal/protocol` JSON-path helpers (Rust/Python parity).
 
 ## [v0.5.1] - 2026-03-12

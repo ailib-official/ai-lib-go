@@ -65,6 +65,16 @@ Rust `ai-lib-core` builds HTTP clients with optional proxy routes from, in order
 
 `ai-lib-go` uses the standard library `http.Client` you pass into `NewClientBuilder`; configure `Transport.Proxy` or environment-based proxies in your process the same way you would for any Go service.
 
+### BYOK credential chain
+
+ai-lib-go resolves provider credentials through the PT-074 chain:
+
+1. explicit application override via `WithAPIKey`;
+2. manifest-declared env from `endpoint.auth` or V1 top-level `auth`;
+3. conventional `<PROVIDER_ID>_API_KEY`.
+
+Request auth attachment follows the active manifest auth shape (`bearer`, custom header, or query parameter). Runtime diagnostics should expose only source metadata and env var names, not raw credential values.
+
 ### Streaming
 
 ```go
