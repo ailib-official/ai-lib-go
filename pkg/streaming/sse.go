@@ -349,8 +349,8 @@ func (a *ToolCallAccumulator) GetAll() []map[string]any {
 	var result []map[string]any
 	for id, tc := range a.accumulated {
 		result = append(result, map[string]any{
-			"id":   id,
-			"name": tc.name,
+			"id":        id,
+			"name":      tc.name,
 			"arguments": tc.arguments,
 		})
 	}
@@ -376,6 +376,7 @@ func (a *ToolCallAccumulator) Clear() {
 //     cache_read_input_tokens.
 //   - Canonical ai-protocol extended fields (reasoning_tokens, cache_read_tokens,
 //     cache_creation_tokens) and legacy cache_write_tokens alias.
+//
 // Returns nil when no numeric fields could be populated so callers can distinguish
 // absence from all-zero usage.
 func parseUsage(data map[string]any) *ailib.Usage {

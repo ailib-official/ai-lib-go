@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+      - "feat/**"
+      - "fix/**"
+      - "chore/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Go lint and test
+    runs-on: ubuntu-latest
+    env:
+      AI_PROTOCOL_DIR: ${{ github.workspace }}/ai-protocol
+      COMPLIANCE_DIR: ${{ github.workspace }}/ai-protocol/tests/compliance
+    steps:
+      - name: Check out ai-lib-go
+        uses: actions/checkout@v4
+
+      - name: Check out ai-protocol compliance fixtures
+        uses: actions/checkout@v4
+        with:
+          repository: ailib-official/ai-protocol
+          path: ai-protocol
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Check formatting
+        run: |
+          files="$(gofmt -l .)"
+          if [ -n "$files" ]; then
+            echo "$files"
+            exit 1
+          fi
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./...

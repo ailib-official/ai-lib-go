@@ -10,8 +10,14 @@ import (
 	"github.com/ailib-official/ai-lib-go/internal/protocol"
 	"github.com/ailib-official/ai-lib-go/pkg/ailib"
 	"github.com/ailib-official/ai-lib-go/pkg/streaming"
-	"gopkg.in/yaml.v3"
 )
+
+type capabilityManifest interface {
+	GetFeatureFlags() map[string]bool
+	IsFeatureEnabled(string) bool
+	GetAllCapabilities() []string
+	HasCapability(string) bool
+}
 
 // TestGen001FeatureFlags tests feature flag consumption (gen-001)
 func TestGen001FeatureFlags(t *testing.T) {
@@ -22,14 +28,13 @@ func TestGen001FeatureFlags(t *testing.T) {
 	}
 	manifestPath += "/tests/compliance/fixtures/providers/mock-openai.yaml"
 
-	data, err := os.ReadFile(manifestPath)
+	loaded, err := protocol.NewLoader().LoadFile(manifestPath)
 	if err != nil {
 		t.Skipf("skipping: fixture not found: %v", err)
 	}
-
-	var manifest protocol.V2Manifest
-	if err := yaml.Unmarshal(data, &manifest); err != nil {
-		t.Fatalf("failed to parse manifest: %v", err)
+	manifest, ok := loaded.(capabilityManifest)
+	if !ok {
+		t.Fatalf("unexpected manifest type: %T", loaded)
 	}
 
 	// Test GetFeatureFlags
@@ -38,10 +43,8 @@ func TestGen001FeatureFlags(t *testing.T) {
 		t.Log("V1 manifest or no feature flags")
 	} else {
 		// V2 manifest should have feature flags
-		if manifest.Capabilities.FeatureFlags != nil {
-			if !manifest.IsFeatureEnabled("structured_output") {
-				t.Error("expected structured_output to be enabled")
-			}
+		if !manifest.IsFeatureEnabled("structured_output") {
+			t.Error("expected structured_output to be enabled")
 		}
 	}
 

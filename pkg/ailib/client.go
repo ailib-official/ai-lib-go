@@ -17,12 +17,14 @@ import (
 )
 
 type client struct {
-	manifest   any
-	baseURL    string
-	apiKey     string
-	headers    map[string]string
-	maxRetries int
-	http       *http.Client
+	manifest        any
+	baseURL         string
+	credential      protocol.ResolvedCredential
+	authHeaders     map[string]string
+	authQueryParams map[string]string
+	headers         map[string]string
+	maxRetries      int
+	http            *http.Client
 }
 
 func newClient(b *ClientBuilder, httpClient *http.Client) (*client, error) {
@@ -54,13 +56,21 @@ func newClient(b *ClientBuilder, httpClient *http.Client) (*client, error) {
 		return nil, fmt.Errorf("resolved baseURL is empty")
 	}
 
+	credential := protocol.ResolveCredential(manifest, b.apiKey)
+	authMetadata := protocol.BuildAuthMetadata(manifest, credential, false)
+	if manifest == nil && b.apiKey != "" {
+		authMetadata.Headers["Authorization"] = "Bearer " + b.apiKey
+	}
+
 	return &client{
-		manifest:   manifest,
-		baseURL:    baseURL,
-		apiKey:     b.apiKey,
-		headers:    b.headers,
-		maxRetries: b.maxRetries,
-		http:       httpClient,
+		manifest:        manifest,
+		baseURL:         baseURL,
+		credential:      credential,
+		authHeaders:     authMetadata.Headers,
+		authQueryParams: authMetadata.QueryParams,
+		headers:         b.headers,
+		maxRetries:      b.maxRetries,
+		http:            httpClient,
 	}, nil
 }
 
@@ -368,6 +378,13 @@ func (c *client) newRequest(ctx context.Context, method, path string, payload an
 	if err != nil {
 		return nil, err
 	}
+	if len(c.authQueryParams) > 0 {
+		q := req.URL.Query()
+		for k, v := range c.authQueryParams {
+			q.Set(k, v)
+		}
+		req.URL.RawQuery = q.Encode()
+	}
 	req.Header.Set("Content-Type", "application/json")
 	c.setHeaders(req)
 	return req, nil
@@ -377,17 +394,9 @@ func (c *client) setHeaders(req *http.Request) {
 	for k, v := range c.headers {
 		req.Header.Set(k, v)
 	}
-	if c.apiKey == "" {
-		return
+	for k, v := range c.authHeaders {
+		req.Header.Set(k, v)
 	}
-	name := "Authorization"
-	prefix := "Bearer "
-	if c.manifest != nil {
-		if h, p, err := protocol.AuthHeader(c.manifest); err == nil {
-			name, prefix = h, p
-		}
-	}
-	req.Header.Set(name, prefix+c.apiKey)
 }
 
 func (c *client) execute(req *http.Request, out any) error {
