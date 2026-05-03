@@ -111,6 +111,9 @@ func BuildAuthMetadata(m any, credential ResolvedCredential, redacted bool) Auth
 		if prefix == "" {
 			prefix = "Bearer "
 		}
+		if !strings.HasSuffix(prefix, " ") {
+			prefix += " "
+		}
 		headers[name] = prefix + value
 	}
 	return AuthMetadata{Headers: headers, QueryParams: query, SourceKind: credential.SourceKind, SourceName: credential.SourceName}
@@ -148,6 +151,16 @@ func ShadowedAuth(m any) (authConfig, bool) {
 			return authConfig{}, false
 		}
 		return topLevel, true
+	case *V2Manifest:
+		if v.Endpoint.Auth == nil || v.Core == nil {
+			return authConfig{}, false
+		}
+		endpoint := authFromV2(*v.Endpoint.Auth)
+		core := authFromV2(v.Core.Auth)
+		if authSignature(core) == authSignature(authConfig{}) || authSignature(endpoint) == authSignature(core) {
+			return authConfig{}, false
+		}
+		return core, true
 	}
 	return authConfig{}, false
 }
