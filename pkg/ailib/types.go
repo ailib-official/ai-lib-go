@@ -61,6 +61,8 @@ type ChatResponse struct {
 	Model   string   `json:"model"`
 	Choices []Choice `json:"choices"`
 	Usage   *Usage   `json:"usage,omitempty"`
+	// ExecutionMetadata is populated by E-layer Client.Chat on success (PT-071 / schemas/v2/execution-metadata.json).
+	ExecutionMetadata ExecutionMetadata `json:"execution_metadata"`
 }
 
 type Choice struct {
@@ -70,12 +72,17 @@ type Choice struct {
 }
 
 type Usage struct {
-	PromptTokens        int `json:"prompt_tokens"`
-	CompletionTokens    int `json:"completion_tokens"`
-	TotalTokens         int `json:"total_tokens"`
-	ReasoningTokens     int `json:"reasoning_tokens,omitempty"`
-	CacheReadTokens     int `json:"cache_read_tokens,omitempty"`
-	CacheCreationTokens int `json:"cache_creation_tokens,omitempty"`
+	PromptTokens        int                     `json:"prompt_tokens"`
+	CompletionTokens    int                     `json:"completion_tokens"`
+	TotalTokens         int                     `json:"total_tokens"`
+	ReasoningTokens     int                     `json:"reasoning_tokens,omitempty"`
+	CacheReadTokens     int                     `json:"cache_read_input_tokens,omitempty"`
+	CacheCreationTokens int                     `json:"cache_creation_input_tokens,omitempty"`
+	CompletionDetails   *CompletionTokenDetails `json:"completion_tokens_details,omitempty"`
+}
+
+type CompletionTokenDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
 }
 
 type StreamingEvent struct {
@@ -103,6 +110,8 @@ type Stream interface {
 	Event() StreamingEvent
 	Err() error
 	Close() error
+	// ExecutionMetadata is available after Close() on successful streams (Err() nil before Close).
+	ExecutionMetadata() (ExecutionMetadata, bool)
 }
 
 type Client interface {

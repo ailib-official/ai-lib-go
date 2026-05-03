@@ -25,7 +25,14 @@ func DefaultPolicy() Policy {
 
 type TryFunc func(context.Context) error
 
+// Execute runs fn with retries; use ExecuteAttempts when reporting micro_retry_count.
 func Execute(ctx context.Context, p Policy, fn TryFunc, retryable func(error) bool) error {
+	_, err := ExecuteAttempts(ctx, p, fn, retryable)
+	return err
+}
+
+// ExecuteAttempts runs fn with retries and returns how many times fn was invoked (>=1 on error).
+func ExecuteAttempts(ctx context.Context, p Policy, fn TryFunc, retryable func(error) bool) (attempts int, err error) {
 	if p.MaxAttempts <= 0 {
 		p.MaxAttempts = 1
 	}
@@ -38,25 +45,26 @@ func Execute(ctx context.Context, p Policy, fn TryFunc, retryable func(error) bo
 
 	var lastErr error
 	for attempt := 0; attempt < p.MaxAttempts; attempt++ {
+		attempts = attempt + 1
 		if err := fn(ctx); err != nil {
 			lastErr = err
 			if attempt == p.MaxAttempts-1 || (retryable != nil && !retryable(err)) {
-				return err
+				return attempts, err
 			}
 			delay := backoff(p, attempt)
 			select {
 			case <-ctx.Done():
-				return ctx.Err()
+				return attempts, ctx.Err()
 			case <-time.After(delay):
 			}
 			continue
 		}
-		return nil
+		return attempts, nil
 	}
 	if lastErr == nil {
-		return errors.New("retry exhausted")
+		return attempts, errors.New("retry exhausted")
 	}
-	return lastErr
+	return attempts, lastErr
 }
 
 func backoff(p Policy, attempt int) time.Duration {

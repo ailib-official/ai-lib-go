@@ -81,3 +81,12 @@ capability_profile:
 		t.Fatalf("expected iospc_v1 missing process/contract validation error")
 	}
 }
+
+func TestIsJSONDetectsPathExtension(t *testing.T) {
+	if !isJSON("provider.json", []byte("not-json")) {
+		t.Fatalf("expected .json path to be treated as json")
+	}
+	if isJSON("provider.yaml", []byte("key: value")) {
+		t.Fatalf("yaml path should not be treated as json")
+	}
+}

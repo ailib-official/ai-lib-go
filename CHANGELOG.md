@@ -6,6 +6,18 @@
 
 - **PT-074 credential chain parity:** protocol credentials now resolve through explicit overrides, `endpoint.auth` / top-level `auth` env declarations, conventional `<PROVIDER_ID>_API_KEY` fallback, and shared credential-chain compliance fixtures.
 - Non-streaming `Client.Chat` response enrichment: manifest `response_paths` with OpenAI-style fallbacks via `EnrichNonstreamChatResponse` and `internal/protocol` JSON-path helpers (Rust/Python parity).
+- **PT-063 Go hardening (merged):** `Client.Chat` populates `ChatResponse.ExecutionMetadata` (aligned with `schemas/v2/execution-metadata.json`); streaming exposes metadata via `Stream.ExecutionMetadata()` after `Close()`.
+- `internal/resilience.ExecuteAttempts` for accurate `micro_retry_count` reporting.
+- `internal/protocol.ManifestProviderID` helper.
+- Policy-layer `pkg/contact` with `FallbackClient` (moved from `pkg/ailib`); implements `ailib.Client`.
+- Tests: `pkg/ailib/client_execution_metadata_test.go`, `internal/resilience/retry_test.go`, `pkg/contact/fallback_test.go`, `pkg/ailib/execution_result_test.go`.
+- E/P boundary types: `ExecutionResult`, `ExecutionMetadata`, `ExecutionUsage` (`pkg/ailib/execution_result.go`).
+
+### Changed
+
+- **Breaking:** `FallbackClient` / `FallbackPolicy` / `NewFallbackClient*` removed from `pkg/ailib` — import `github.com/ailib-official/ai-lib-go/pkg/contact` instead.
+- `Stream` interface now requires `ExecutionMetadata() (ExecutionMetadata, bool)`.
+- `Usage` JSON tags for cache token fields align with upstream usage shapes (`cache_read_input_tokens`, `cache_creation_input_tokens`, optional `completion_tokens_details`).
 
 ## [v0.5.1] - 2026-03-12
 

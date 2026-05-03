@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -83,7 +84,7 @@ func hasCapabilityProfile(meta map[string]any) bool {
 
 func isJSON(source string, data []byte) bool {
 	trimmed := strings.TrimSpace(string(data))
-	if strings.HasPrefix(source, ".json") {
+	if strings.EqualFold(filepath.Ext(source), ".json") {
 		return true
 	}
 	return strings.HasPrefix(trimmed, "{")

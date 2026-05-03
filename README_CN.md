@@ -155,8 +155,9 @@ client, _ := ailib.NewClientBuilder().
 
 - `internal/protocol` — manifest 契约、加载、能力元信息、流式解码格式
 - `internal/stream` — SSE 解码（openai_sse、anthropic_sse）
-- `internal/resilience` — 重试与退避策略
-- `pkg/ailib` — 对外 SDK API（`Client`、`ClientBuilder`、能力模型、`FallbackClient`）
+- `internal/resilience` — 有界传输重试与退避（执行层）
+- `pkg/ailib` — 对外执行层 SDK（`Client`、`ClientBuilder`、能力模型）
+- `pkg/contact` — 策略层辅助（多提供商故障转移的 `FallbackClient`）
 - `tests/compliance` — 基于共享夹具的合规执行器
 
 ## 🗺️ 生态定位
