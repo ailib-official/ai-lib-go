@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+## [v0.6.0] - 2026-05-07
+
 ### Added
 
 - **PT-074 credential chain parity:** protocol credentials now resolve through explicit overrides, `endpoint.auth` / top-level `auth` env declarations, conventional `<PROVIDER_ID>_API_KEY` fallback, and shared credential-chain compliance fixtures.
