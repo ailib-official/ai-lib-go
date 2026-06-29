@@ -64,7 +64,7 @@ func loadCasesFromFile(path string) ([]testCase, error) {
 	return out, nil
 }
 
-func runComplianceDir(t *testing.T, root string, rel string, execute func(tc testCase, root string) error) {
+func runComplianceDir(t *testing.T, root string, rel string, execute func(tc testCase, root string, caseYaml string) error) {
 	t.Helper()
 	dir := filepath.Join(root, rel)
 	entries, err := os.ReadDir(dir)
@@ -75,19 +75,45 @@ func runComplianceDir(t *testing.T, root string, rel string, execute func(tc tes
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".yaml") {
 			continue
 		}
-		cases, err := loadCasesFromFile(filepath.Join(dir, e.Name()))
+		caseYaml := filepath.Join(dir, e.Name())
+		cases, err := loadCasesFromFile(caseYaml)
 		if err != nil {
 			t.Fatalf("parse %s: %v", e.Name(), err)
 		}
 		for _, c := range cases {
 			tc := c
 			t.Run(tc.ID+"_"+tc.Name, func(t *testing.T) {
-				if err := execute(tc, root); err != nil {
+				if err := execute(tc, root, caseYaml); err != nil {
 					t.Fatalf("case %s failed: %v", tc.ID, err)
 				}
 			})
 		}
 	}
+}
+
+func resolveManifestPath(complianceRoot, caseYamlPath, manifestRel string) string {
+	candidates := []string{}
+	if caseYamlPath != "" {
+		candidates = append(candidates, filepath.Clean(filepath.Join(filepath.Dir(caseYamlPath), manifestRel)))
+	}
+	candidates = append(candidates, filepath.Join(complianceRoot, manifestRel))
+	if pr := os.Getenv("AI_PROTOCOL_DIR"); pr != "" {
+		slash := filepath.ToSlash(manifestRel)
+		for _, prefix := range []string{"v2/", "dist/"} {
+			if idx := strings.Index(slash, prefix); idx >= 0 {
+				candidates = append(candidates, filepath.Join(pr, filepath.FromSlash(slash[idx:])))
+			}
+		}
+	}
+	for _, candidate := range candidates {
+		if st, err := os.Stat(candidate); err == nil && !st.IsDir() {
+			return candidate
+		}
+	}
+	if len(candidates) > 0 {
+		return candidates[0]
+	}
+	return filepath.Join(complianceRoot, manifestRel)
 }
 
 func TestProtocolLoadingCompliance(t *testing.T) {
@@ -154,7 +180,7 @@ func TestCredentialChainCompliance(t *testing.T) {
 	runComplianceDir(t, root, "cases/09-credential-resolution", runCredentialChain)
 }
 
-func runProtocolLoading(tc testCase, root string) error {
+func runProtocolLoading(tc testCase, root string, caseYaml string) error {
 	if tc.Input["type"] != "protocol_loading" {
 		return nil
 	}
@@ -163,7 +189,7 @@ func runProtocolLoading(tc testCase, root string) error {
 		return fmt.Errorf("manifest_path missing")
 	}
 	loader := protocol.NewLoader()
-	manifest, err := loader.LoadFile(filepath.Join(root, path))
+	manifest, err := loader.LoadFile(resolveManifestPath(root, caseYaml, path))
 	valid := err == nil
 	expValid, _ := tc.Expected["valid"].(bool)
 	if valid != expValid {
@@ -204,7 +230,7 @@ func runProtocolLoading(tc testCase, root string) error {
 	return nil
 }
 
-func runErrorClassification(tc testCase, root string) error {
+func runErrorClassification(tc testCase, root string, _ string) error {
 	if tc.Input["type"] != "error_classification" {
 		return nil
 	}
@@ -229,7 +255,7 @@ func runErrorClassification(tc testCase, root string) error {
 	return nil
 }
 
-func runMessageBuilding(tc testCase, root string) error {
+func runMessageBuilding(tc testCase, root string, _ string) error {
 	if tc.Input["type"] != "message_building" {
 		return nil
 	}
@@ -249,7 +275,7 @@ func runMessageBuilding(tc testCase, root string) error {
 	return nil
 }
 
-func runStreaming(tc testCase, root string) error {
+func runStreaming(tc testCase, root string, _ string) error {
 	switch tc.Input["type"] {
 	case "stream_decode":
 		return runStreamDecode(tc)
@@ -262,7 +288,7 @@ func runStreaming(tc testCase, root string) error {
 	}
 }
 
-func runRequestBuilding(tc testCase, root string) error {
+func runRequestBuilding(tc testCase, root string, _ string) error {
 	if tc.Input["type"] != "parameter_mapping" {
 		return nil
 	}
@@ -291,7 +317,7 @@ func runRequestBuilding(tc testCase, root string) error {
 	return nil
 }
 
-func runRetryDecision(tc testCase, root string) error {
+func runRetryDecision(tc testCase, root string, _ string) error {
 	if tc.Input["type"] != "retry_decision" {
 		return nil
 	}
@@ -329,12 +355,12 @@ func runRetryDecision(tc testCase, root string) error {
 	return nil
 }
 
-func runAdvancedCapabilities(tc testCase, root string) error {
+func runAdvancedCapabilities(tc testCase, root string, caseYaml string) error {
 	switch tc.Input["type"] {
 	case "capability_guard":
 		return runCapabilityGuard(tc)
 	case "advanced_endpoint_mapping":
-		return runAdvancedEndpointMapping(tc, root)
+		return runAdvancedEndpointMapping(tc, root, caseYaml)
 	case "fallback_decision":
 		return runFallbackDecision(tc)
 	case "provider_mock_behavior":
@@ -344,7 +370,7 @@ func runAdvancedCapabilities(tc testCase, root string) error {
 	}
 }
 
-func runCredentialChain(tc testCase, root string) error {
+func runCredentialChain(tc testCase, root string, _ string) error {
 	switch tc.Input["type"] {
 	case "credential_resolution", "auth_attachment":
 	default:
@@ -469,7 +495,7 @@ func runCapabilityGuard(tc testCase) error {
 	return nil
 }
 
-func runAdvancedEndpointMapping(tc testCase, root string) error {
+func runAdvancedEndpointMapping(tc testCase, root string, caseYaml string) error {
 	op, _ := tc.Input["operation"].(string)
 	fallback, _ := tc.Input["fallback"].(string)
 	loader := protocol.NewLoader()
@@ -484,7 +510,7 @@ func runAdvancedEndpointMapping(tc testCase, root string) error {
 		if manifestPath == "" {
 			return fmt.Errorf("manifest_path or manifest missing")
 		}
-		m, err = loader.LoadFile(filepath.Join(root, manifestPath))
+		m, err = loader.LoadFile(resolveManifestPath(root, caseYaml, manifestPath))
 	}
 	if err != nil {
 		return err
