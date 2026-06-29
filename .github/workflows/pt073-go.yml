@@ -40,11 +40,30 @@ jobs:
           go-version: "1.21"
           cache-dependency-path: ai-lib-go/go.sum
 
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: E/P boundary — Go (protocol/stream)
+        run: |
+          python "${{ github.workspace }}/ai-protocol/tests/compliance/ep-boundary/check_ep_boundary.py" \
+            --go-root "${{ github.workspace }}/ai-lib-go"
+
+      - name: ExecutionMetadata samples — schema validation
+        run: |
+          pip install fastjsonschema
+          python "${{ github.workspace }}/ai-protocol/tests/compliance/ep-boundary/validate_execution_metadata_samples.py" \
+            --protocol-root "${{ github.workspace }}/ai-protocol"
+
       - name: Download dependencies
         run: go mod download
 
       - name: Vet
         run: go vet ./...
+
+      - name: Contact layer — compile smoke
+        run: go test ./pkg/contact/... -run=^$
 
       - name: Compliance tests
         env:
