@@ -406,17 +406,25 @@ func (c *client) newRequest(ctx context.Context, method, path string, payload an
 	if err := validateRequestMeta(method, path); err != nil {
 		return nil, err
 	}
+	var bodyBytes []byte
 	var body io.Reader
 	if payload != nil {
 		b, err := json.Marshal(payload)
 		if err != nil {
 			return nil, err
 		}
-		body = bytes.NewReader(b)
+		bodyBytes = b
+		body = bytes.NewReader(bodyBytes)
 	}
 	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
 	if err != nil {
 		return nil, err
+	}
+	if len(bodyBytes) > 0 {
+		req.ContentLength = int64(len(bodyBytes))
+		req.GetBody = func() (io.ReadCloser, error) {
+			return io.NopCloser(bytes.NewReader(bodyBytes)), nil
+		}
 	}
 	if len(c.authQueryParams) > 0 {
 		q := req.URL.Query()
@@ -449,6 +457,13 @@ func (c *client) execute(req *http.Request, out any) (attempts int, err error) {
 	}
 
 	return resilience.ExecuteAttempts(ctx, p, func(_ context.Context) error {
+		if req.GetBody != nil {
+			rc, err := req.GetBody()
+			if err != nil {
+				return err
+			}
+			req.Body = rc
+		}
 		resp, err := c.http.Do(req)
 		if err != nil {
 			return err
