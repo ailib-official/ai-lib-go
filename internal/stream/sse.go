@@ -15,6 +15,7 @@ type Event struct {
 	Delta        string
 	FinishReason string
 	ToolCall     any
+	Usage        map[string]any
 }
 
 type Decoder struct {
@@ -95,6 +96,9 @@ func extractEventOpenAI(raw map[string]any) Event {
 		ev.ToolCall = tools
 		ev.Type = "ToolCallDelta"
 	}
+	if usage, ok := raw["usage"].(map[string]any); ok {
+		ev.Usage = usage
+	}
 	return ev
 }
 
@@ -120,6 +124,9 @@ func extractEventAnthropic(raw map[string]any) Event {
 		if sr, ok := delta["stop_reason"].(string); ok {
 			ev.FinishReason = sr
 			ev.Type = "StreamEnd"
+		}
+		if usage, ok := raw["usage"].(map[string]any); ok {
+			ev.Usage = usage
 		}
 	}
 	return ev

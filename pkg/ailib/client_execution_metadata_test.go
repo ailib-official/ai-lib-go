@@ -134,6 +134,41 @@ func TestClientChatMicroRetryCountAfterTransientFailure(t *testing.T) {
 	}
 }
 
+func TestClientChatStreamExecutionMetadataIncludesUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{\"content\":\"x\"},\"finish_reason\":\"\"}]}\n\n")
+		_, _ = io.WriteString(w, "data: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":10,\"completion_tokens\":5,\"total_tokens\":15}}\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+	}))
+	defer srv.Close()
+
+	c, err := NewClientBuilder().WithBaseURL(srv.URL).Build()
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	defer c.Close()
+
+	st, err := c.ChatStream(context.Background(), []Message{{Role: RoleUser, Content: "hello"}}, &ChatOptions{Model: "m1"})
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	for st.Next() {
+	}
+	if st.Err() != nil {
+		t.Fatalf("stream err: %v", st.Err())
+	}
+	_ = st.Close()
+
+	meta, ok := st.ExecutionMetadata()
+	if !ok {
+		t.Fatalf("expected execution metadata after Close")
+	}
+	if meta.Usage == nil || meta.Usage.TotalTokens != 15 {
+		t.Fatalf("usage: %+v", meta.Usage)
+	}
+}
+
 func TestClientChatStreamExecutionMetadataAfterClose(t *testing.T) {
 	proto := []byte(`id: streamprov
 protocol_version: "2.0"

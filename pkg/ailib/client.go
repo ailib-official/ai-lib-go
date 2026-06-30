@@ -629,6 +629,21 @@ func chatUsageToExecutionUsage(u *Usage) *ExecutionUsage {
 	return out
 }
 
+func usageFromMap(raw map[string]any) *Usage {
+	if raw == nil {
+		return nil
+	}
+	b, err := json.Marshal(raw)
+	if err != nil {
+		return nil
+	}
+	var u Usage
+	if err := json.Unmarshal(b, &u); err != nil {
+		return nil
+	}
+	return &u
+}
+
 type sseStream struct {
 	body             io.ReadCloser
 	decoder          *stream.Decoder
@@ -641,6 +656,7 @@ type sseStream struct {
 	closed           bool
 	meta             ExecutionMetadata
 	metaFilled       bool
+	lastUsage        map[string]any
 }
 
 func (s *sseStream) Next() bool {
@@ -656,6 +672,9 @@ func (s *sseStream) Next() bool {
 		Type:         ev.Type,
 		Delta:        ev.Delta,
 		FinishReason: ev.FinishReason,
+	}
+	if ev.Usage != nil {
+		s.lastUsage = ev.Usage
 	}
 	return true
 }
@@ -684,6 +703,11 @@ func (s *sseStream) fillExecutionMetadata(end time.Time) {
 		ExecutionLatencyMs:   uint64(end.Sub(s.started).Milliseconds()),
 		TranslationLatencyMs: uint64(s.transDone.Sub(s.started).Milliseconds()),
 		MicroRetryCount:      0,
+	}
+	if s.lastUsage != nil {
+		if u := usageFromMap(s.lastUsage); u != nil {
+			s.meta.Usage = chatUsageToExecutionUsage(u)
+		}
 	}
 }
 
