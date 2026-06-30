@@ -30,6 +30,9 @@ func TestGen001FeatureFlags(t *testing.T) {
 
 	loaded, err := protocol.NewLoader().LoadFile(manifestPath)
 	if err != nil {
+		if os.Getenv("COMPLIANCE_DIR") != "" || os.Getenv("GITHUB_ACTIONS") == "true" {
+			t.Fatalf("fixture required in CI: %v", err)
+		}
 		t.Skipf("skipping: fixture not found: %v", err)
 	}
 	manifest, ok := loaded.(capabilityManifest)
