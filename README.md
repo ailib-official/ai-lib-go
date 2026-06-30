@@ -63,7 +63,7 @@ func main() {
 
 Rust `ai-lib-core` builds HTTP clients with optional proxy routes from, in order: `AI_PROXY_URL`, `HTTPS_PROXY`, `HTTP_PROXY`. Use `NO_PROXY` (and where supported, `AI_PROXY_NO_PROXY`) so provider endpoints that must be direct are excluded when a corporate proxy is set.
 
-`ai-lib-go` uses the standard library `http.Client` you pass into `NewClientBuilder`; configure `Transport.Proxy` or environment-based proxies in your process the same way you would for any Go service.
+`ai-lib-go` does not read those env vars automatically. Configure egress on the `*http.Client` you pass via `WithHTTPClient` (for example `Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}`), or rely on your process-wide proxy settings when using the default client.
 
 ### BYOK credential chain
 
@@ -114,7 +114,7 @@ if err := stream.Err(); err != nil {
 
 ## 🔄 V2 Protocol Alignment
 
-`ai-lib-go` aligns with the **AI-Protocol V2** specification. V0.5.0 includes V1/V2 manifest parsing, manifest-driven streaming decoder, standard error codes, and compliance test coverage.
+`ai-lib-go` aligns with the **AI-Protocol V2** specification. **v0.6.0** includes V1/V2 manifest parsing, manifest-driven streaming decoder, standard error codes, and compliance test coverage.
 
 ### Standard Error Codes (V2, ARCH-003)
 
@@ -128,7 +128,7 @@ All provider errors are classified into 13 standard error codes with unified ret
 | E1004  | not_found        | No        | No           |
 | E1005  | request_too_large| No        | No           |
 | E2001  | rate_limited     | Yes       | Yes          |
-| E2002  | quota_exhausted  | Yes       | Yes          |
+| E2002  | quota_exhausted  | No        | Yes          |
 | E3001  | server_error     | Yes       | Yes          |
 | E3002  | overloaded       | Yes       | Yes          |
 | E3003  | timeout          | Yes       | Yes          |
@@ -173,6 +173,7 @@ client, _ := ailib.NewClientBuilder().
 - `internal/stream` — SSE decoding (openai_sse, anthropic_sse)
 - `internal/resilience` — bounded transport retry / backoff (execution layer)
 - `pkg/ailib` — public execution-layer SDK (`Client`, `ClientBuilder`, capabilities)
+- `pkg/streaming` — compliance-oriented stream/event mapping helpers (used by compliance tests)
 - `pkg/contact` — policy-layer helpers (`FallbackClient` for multi-provider failover)
 - `tests/compliance` — fixture-driven compliance runner
 
