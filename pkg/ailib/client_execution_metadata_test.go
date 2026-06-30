@@ -1,6 +1,7 @@
 package ailib
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -48,6 +49,55 @@ endpoint:
 	// we only verify the field is populated (non-negative by type), not that
 	// it is strictly positive.
 	_ = resp.ExecutionMetadata.ExecutionLatencyMs
+}
+
+// QA-go-006: micro-retry must resend the full JSON body (not an exhausted io.Reader).
+func TestExecuteRetriesResendFullRequestBody(t *testing.T) {
+	var hits int32
+	var firstBody []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n := atomic.AddInt32(&hits, 1)
+		body, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read body: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		if len(body) == 0 {
+			t.Errorf("attempt %d: empty request body", n)
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if n == 1 {
+			firstBody = append([]byte(nil), body...)
+		} else if !bytes.Equal(body, firstBody) {
+			t.Errorf("attempt %d: body %q differs from first %q", n, string(body), string(firstBody))
+		}
+		if n == 1 {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = io.WriteString(w, `{"error":{"type":"overloaded"}}`)
+			return
+		}
+		_, _ = w.Write([]byte(`{"id":"r1","model":"m1","choices":[{"index":0,"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer srv.Close()
+
+	c, err := NewClientBuilder().
+		WithBaseURL(srv.URL).
+		WithMaxRetries(3).
+		Build()
+	if err != nil {
+		t.Fatalf("build: %v", err)
+	}
+	defer c.Close()
+
+	_, err = c.Chat(context.Background(), []Message{{Role: RoleUser, Content: "hello"}}, &ChatOptions{Model: "m1"})
+	if err != nil {
+		t.Fatalf("chat: %v", err)
+	}
+	if atomic.LoadInt32(&hits) < 2 {
+		t.Fatalf("expected at least two server hits, got %d", hits)
+	}
 }
 
 func TestClientChatMicroRetryCountAfterTransientFailure(t *testing.T) {
