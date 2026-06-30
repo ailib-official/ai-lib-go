@@ -12,7 +12,9 @@ import (
 
 	"github.com/ailib-official/ai-lib-go/internal/protocol"
 	"github.com/ailib-official/ai-lib-go/internal/resilience"
+	"github.com/ailib-official/ai-lib-go/internal/stream"
 	"github.com/ailib-official/ai-lib-go/pkg/ailib"
+	"github.com/ailib-official/ai-lib-go/pkg/streaming"
 	"gopkg.in/yaml.v3"
 )
 
@@ -617,36 +619,46 @@ func valueAtPath(root map[string]any, path string) (any, bool) {
 func runStreamDecode(tc testCase) error {
 	rawChunks, _ := tc.Input["raw_chunks"].([]any)
 	decoderCfg, _ := tc.Input["decoder_config"].(map[string]any)
-	prefix, _ := decoderCfg["prefix"].(string)
-	if prefix == "" {
-		prefix = "data: "
-	}
 	doneSignal, _ := decoderCfg["done_signal"].(string)
 	if doneSignal == "" {
 		doneSignal = "[DONE]"
 	}
+	prefix, _ := decoderCfg["prefix"].(string)
+	if prefix == "" {
+		prefix = "data: "
+	}
 
-	var frames []map[string]any
+	var input strings.Builder
 	done := false
 	for _, c := range rawChunks {
 		chunk, _ := c.(string)
+		input.WriteString(chunk)
 		for _, line := range strings.Split(chunk, "\n") {
 			if !strings.HasPrefix(line, prefix) {
 				continue
 			}
 			payload := strings.TrimSpace(strings.TrimPrefix(line, prefix))
-			if payload == "" {
-				continue
-			}
 			if payload == doneSignal {
 				done = true
-				continue
-			}
-			var frame map[string]any
-			if err := json.Unmarshal([]byte(payload), &frame); err == nil {
-				frames = append(frames, frame)
 			}
 		}
+	}
+
+	format, _ := decoderCfg["format"].(string)
+	dec := stream.NewSSEDecoder(strings.NewReader(input.String()))
+	if format == "anthropic_sse" {
+		dec = stream.NewDecoderWithFormat(strings.NewReader(input.String()), "anthropic_sse")
+	}
+	frameCount := 0
+	for {
+		_, ok, err := dec.Next()
+		if err != nil {
+			return err
+		}
+		if !ok {
+			break
+		}
+		frameCount++
 	}
 
 	frameRange, _ := tc.Expected["frame_count"].(map[string]any)
@@ -655,8 +667,8 @@ func runStreamDecode(tc testCase) error {
 	if minF == 0 && maxF == 0 {
 		maxF = 1 << 30
 	}
-	if len(frames) < minF || len(frames) > maxF {
-		return fmt.Errorf("frame_count=%d out of range [%d,%d]", len(frames), minF, maxF)
+	if frameCount < minF || frameCount > maxF {
+		return fmt.Errorf("frame_count=%d out of range [%d,%d]", frameCount, minF, maxF)
 	}
 	if v, ok := tc.Expected["done_received"].(bool); ok && v != done {
 		return fmt.Errorf("done_received expected %v got %v", v, done)
@@ -672,21 +684,7 @@ func runEventMapping(tc testCase) error {
 	actual := make([]map[string]any, 0)
 	for _, f := range frames {
 		frame, _ := f.(map[string]any)
-		choices, _ := frame["choices"].([]any)
-		if len(choices) == 0 {
-			continue
-		}
-		choice, _ := choices[0].(map[string]any)
-		delta, _ := choice["delta"].(map[string]any)
-		if content, ok := delta["content"]; ok {
-			actual = append(actual, map[string]any{"type": "PartialContentDelta", "content": content})
-		}
-		if toolCalls, ok := delta["tool_calls"]; ok {
-			actual = append(actual, map[string]any{"type": "PartialToolCall", "tool_calls": toolCalls})
-		}
-		if fr, ok := choice["finish_reason"]; ok && fr != nil {
-			actual = append(actual, map[string]any{"type": "StreamEnd", "finish_reason": fr})
-		}
+		actual = append(actual, streaming.ComplianceEventsFromOpenAIFrame(frame)...)
 	}
 	exp := sliceMap(tc.Expected["events"])
 	if !jsonDeepEqual(actual, exp) {
@@ -700,40 +698,18 @@ func runEventMapping(tc testCase) error {
 
 func runToolAccumulation(tc testCase) error {
 	chunks, _ := tc.Input["partial_chunks"].([]any)
-	type key struct {
-		idx int
-		id  string
-	}
-	merged := map[key]map[string]any{}
-	order := make([]key, 0)
-
+	input := make([]map[string]any, 0, len(chunks))
 	for _, c := range chunks {
 		chunk, _ := c.(map[string]any)
-		k := key{idx: asInt(chunk["index"]), id: asString(chunk["id"])}
-		fn, _ := chunk["function"].(map[string]any)
-		if _, ok := merged[k]; !ok {
-			order = append(order, k)
-			merged[k] = map[string]any{
-				"index": k.idx,
-				"id":    k.id,
-				"type":  firstNonEmptyString(asString(chunk["type"]), "function"),
-				"function": map[string]any{
-					"name":      asString(fn["name"]),
-					"arguments": "",
-				},
-			}
-		}
-		cur := merged[k]["function"].(map[string]any)
-		cur["arguments"] = asString(cur["arguments"]) + asString(fn["arguments"])
+		input = append(input, chunk)
 	}
-
-	actual := make([]map[string]any, 0, len(order))
-	for _, k := range order {
-		actual = append(actual, merged[k])
-	}
+	actual := streaming.AssembleToolCallPartials(input)
 	exp := sliceMap(tc.Expected["assembled_tool_calls"])
 	if !jsonDeepEqual(actual, exp) {
 		return fmt.Errorf("assembled_tool_calls mismatch expected=%v got=%v", exp, actual)
+	}
+	if v, ok := tc.Expected["complete"].(bool); ok && v && len(actual) == 0 {
+		return fmt.Errorf("complete expected true but no tool calls assembled")
 	}
 	return nil
 }
