@@ -340,6 +340,17 @@ func ValidateCapabilityProfile(profile *CapabilityProfile) error {
 }
 
 func ClassifyError(m any, status int, providerCode, providerType string) (code string, ok bool) {
+	if c, ok := ClassifyProviderError(m, providerCode, providerType); ok {
+		return c, true
+	}
+	if c, ok := ClassifyHTTPStatusError(m, status); ok {
+		return c, true
+	}
+	return "", false
+}
+
+// ClassifyProviderError maps provider error code/type via manifest (no HTTP status fallback).
+func ClassifyProviderError(m any, providerCode, providerType string) (string, bool) {
 	cls, exists := errorClass(m)
 	if !exists {
 		return "", false
@@ -354,10 +365,17 @@ func ClassifyError(m any, status int, providerCode, providerType string) (code s
 			return normalizeErrorNameToCode(n)
 		}
 	}
-	if cls.ByHTTPStatus != nil {
-		if n, hit := cls.ByHTTPStatus[fmt.Sprintf("%d", status)]; hit {
-			return normalizeErrorNameToCode(n)
-		}
+	return "", false
+}
+
+// ClassifyHTTPStatusError maps HTTP status via manifest only.
+func ClassifyHTTPStatusError(m any, status int) (string, bool) {
+	cls, exists := errorClass(m)
+	if !exists || cls.ByHTTPStatus == nil {
+		return "", false
+	}
+	if n, hit := cls.ByHTTPStatus[fmt.Sprintf("%d", status)]; hit {
+		return normalizeErrorNameToCode(n)
 	}
 	return "", false
 }

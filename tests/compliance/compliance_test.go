@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/ailib-official/ai-lib-go/internal/protocol"
+	"github.com/ailib-official/ai-lib-go/internal/resilience"
 	"github.com/ailib-official/ai-lib-go/pkg/ailib"
 	"gopkg.in/yaml.v3"
 )
@@ -236,7 +237,20 @@ func runErrorClassification(tc testCase, root string, _ string) error {
 	}
 	status := asInt(tc.Input["http_status"])
 	body, _ := tc.Input["response_body"].(map[string]any)
-	code, name := classify(status, body)
+	bodyJSON, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	var manifest any
+	if setupPath, ok := tc.Setup["manifest_path"].(string); ok && setupPath != "" {
+		loader := protocol.NewLoader()
+		manifest, err = loader.LoadFile(filepath.Join(root, setupPath))
+		if err != nil {
+			return err
+		}
+	}
+	code := ailib.ClassifyHTTPResponse(manifest, status, bodyJSON)
+	name := ailib.StandardErrorName(code)
 	retryable := ailib.IsRetryableCode(code)
 	fallbackable := ailib.IsFallbackableCode(code)
 
@@ -346,7 +360,15 @@ func runRetryDecision(tc testCase, root string, _ string) error {
 		if delayCfg, ok := tc.Expected["delay_ms"].(map[string]any); ok {
 			minExpected := asInt(delayCfg["min"])
 			maxExpected := asInt(delayCfg["max"])
-			delay := computeDelayMs(policy, attempt)
+			minMs := asInt(policy["min_delay_ms"])
+			if minMs <= 0 {
+				minMs = 1000
+			}
+			maxMs := asInt(policy["max_delay_ms"])
+			if maxMs <= 0 {
+				maxMs = 60000
+			}
+			delay := resilience.BackoffMilliseconds(minMs, maxMs, attempt)
 			if delay < minExpected || delay > maxExpected {
 				return fmt.Errorf("delay out of range: %d not in [%d,%d]", delay, minExpected, maxExpected)
 			}
@@ -737,72 +759,6 @@ func hasRequiredShape(m map[string]any) bool {
 	}
 	endpoint, _ := m["endpoint"].(map[string]any)
 	return asString(endpoint["base_url"]) != ""
-}
-
-func classify(status int, response map[string]any) (code string, name string) {
-	rawProviderCode := ""
-	if e, ok := response["error"].(map[string]any); ok {
-		rawProviderCode = asString(e["code"])
-		if rawProviderCode == "" {
-			rawProviderCode = asString(e["type"])
-		}
-	}
-
-	switch rawProviderCode {
-	case "invalid_api_key", "authentication_error":
-		return "E1002", "authentication"
-	case "model_not_found":
-		return "E1004", "not_found"
-	case "context_length_exceeded":
-		return "E1005", "request_too_large"
-	case "insufficient_quota":
-		return "E2002", "quota_exhausted"
-	case "overloaded_error", "overloaded":
-		return "E3002", "overloaded"
-	}
-
-	switch status {
-	case 400:
-		return "E1001", "invalid_request"
-	case 401:
-		return "E1002", "authentication"
-	case 403:
-		return "E1003", "permission_denied"
-	case 404:
-		return "E1004", "not_found"
-	case 413:
-		return "E1005", "request_too_large"
-	case 429:
-		return "E2001", "rate_limited"
-	case 500:
-		return "E3001", "server_error"
-	case 503, 529:
-		return "E3002", "overloaded"
-	case 504:
-		return "E3003", "timeout"
-	default:
-		return "E9999", "unknown"
-	}
-}
-
-func computeDelayMs(policy map[string]any, attempt int) int {
-	minD := asInt(policy["min_delay_ms"])
-	if minD <= 0 {
-		minD = 1000
-	}
-	maxD := asInt(policy["max_delay_ms"])
-	if maxD <= 0 {
-		maxD = 60000
-	}
-	exp := attempt - 1
-	if exp < 0 {
-		exp = 0
-	}
-	delay := minD << exp
-	if delay > maxD {
-		return maxD
-	}
-	return delay
 }
 
 func asInt(v any) int {
