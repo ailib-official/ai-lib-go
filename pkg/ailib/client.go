@@ -497,9 +497,13 @@ func parseHTTPError(manifest any, resp *http.Response) error {
 	body := strings.TrimSpace(string(b))
 	code := classifyStatus(resp.StatusCode)
 	pCode, pType := extractProviderErrorTokens(b)
-	if c, ok := protocol.ClassifyError(manifest, resp.StatusCode, pCode, pType); ok {
+	if c, ok := protocol.ClassifyProviderError(manifest, pCode, pType); ok {
 		code = c
-	} else if c, ok := classifyProviderErrorCode(code, b); ok {
+	} else if pCode != "" || pType != "" {
+		if c, ok := classifyProviderErrorCode(code, b); ok {
+			code = c
+		}
+	} else if c, ok := protocol.ClassifyHTTPStatusError(manifest, resp.StatusCode); ok {
 		code = c
 	}
 	return &APIError{
@@ -558,6 +562,56 @@ func validateRequestMeta(method, path string) error {
 	}
 }
 
+// ClassifyHTTPResponse applies production manifest-aware HTTP error classification.
+func ClassifyHTTPResponse(manifest any, status int, body []byte) string {
+	code := classifyStatus(status)
+	pCode, pType := extractProviderErrorTokens(body)
+	if c, ok := protocol.ClassifyProviderError(manifest, pCode, pType); ok {
+		return c
+	}
+	if pCode != "" || pType != "" {
+		if c, ok := classifyProviderErrorCode(code, body); ok {
+			return c
+		}
+	}
+	if c, ok := protocol.ClassifyHTTPStatusError(manifest, status); ok {
+		return c
+	}
+	return code
+}
+
+// StandardErrorName returns the protocol error class name for a standard code (e.g. E2001 → rate_limited).
+func StandardErrorName(code string) string {
+	switch code {
+	case ErrInvalidRequest:
+		return "invalid_request"
+	case ErrAuthentication:
+		return "authentication"
+	case ErrPermission:
+		return "permission_denied"
+	case ErrNotFound:
+		return "not_found"
+	case ErrUnsupported:
+		return "request_too_large"
+	case ErrRateLimited:
+		return "rate_limited"
+	case ErrQuotaExhausted:
+		return "quota_exhausted"
+	case ErrServerError:
+		return "server_error"
+	case ErrOverloaded:
+		return "overloaded"
+	case ErrTimeout:
+		return "timeout"
+	case ErrConflict:
+		return "conflict"
+	case ErrCancelled:
+		return "cancelled"
+	default:
+		return "unknown"
+	}
+}
+
 func classifyProviderErrorCode(defaultCode string, body []byte) (string, bool) {
 	type nestedError struct {
 		Code string `json:"code"`
@@ -590,7 +644,7 @@ func classifyProviderErrorCode(defaultCode string, body []byte) (string, bool) {
 	case "cancelled":
 		return ErrCancelled, true
 	default:
-		return defaultCode, true
+		return "", false
 	}
 }
 

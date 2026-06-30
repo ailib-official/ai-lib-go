@@ -75,3 +75,15 @@ func backoff(p Policy, attempt int) time.Duration {
 	}
 	return d
 }
+
+// BackoffMilliseconds returns exponential backoff delay for compliance / policy tests.
+func BackoffMilliseconds(minMs, maxMs, attemptOneBased int) int {
+	if attemptOneBased < 1 {
+		attemptOneBased = 1
+	}
+	p := Policy{
+		MinDelay: time.Duration(minMs) * time.Millisecond,
+		MaxDelay: time.Duration(maxMs) * time.Millisecond,
+	}
+	return int(backoff(p, attemptOneBased-1).Milliseconds())
+}
