@@ -16,6 +16,7 @@ type ClientBuilder struct {
 	headers      map[string]string
 	timeout      time.Duration
 	maxRetries   int
+	httpClient   *http.Client
 }
 
 func NewClientBuilder() *ClientBuilder {
@@ -61,11 +62,25 @@ func (b *ClientBuilder) WithMaxRetries(n int) *ClientBuilder {
 	return b
 }
 
+// WithHTTPClient supplies a custom *http.Client (e.g. Transport.Proxy for corporate egress).
+// When unset, Build uses a default client with only Timeout configured.
+func (b *ClientBuilder) WithHTTPClient(c *http.Client) *ClientBuilder {
+	b.httpClient = c
+	return b
+}
+
 func (b *ClientBuilder) Build() (Client, error) {
 	if len(b.protocolData) == 0 && b.protocolPath == "" && b.baseURL == "" {
 		return nil, fmt.Errorf("one of protocolData/protocolPath/baseURL must be configured")
 	}
 
-	httpClient := &http.Client{Timeout: b.timeout}
+	httpClient := b.httpClient
+	if httpClient == nil {
+		httpClient = &http.Client{Timeout: b.timeout}
+	} else if httpClient.Timeout == 0 && b.timeout > 0 {
+		cloned := *httpClient
+		cloned.Timeout = b.timeout
+		httpClient = &cloned
+	}
 	return newClient(b, httpClient)
 }

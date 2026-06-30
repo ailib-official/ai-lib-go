@@ -98,7 +98,7 @@ if err := stream.Err(); err != nil {
 
 ## 🔄 V2 协议对齐
 
-`ai-lib-go` 与 **AI-Protocol V2** 规范对齐。V0.5.0 包含 V1/V2 manifest 解析、manifest 驱动的流式解码器、标准错误码及合规测试覆盖。
+`ai-lib-go` 与 **AI-Protocol V2** 规范对齐。**v0.6.0** 包含 V1/V2 manifest 解析、manifest 驱动的流式解码器、标准错误码及合规测试覆盖。
 
 ### 标准错误码（V2，ARCH-003）
 
@@ -112,7 +112,7 @@ if err := stream.Err(); err != nil {
 | E1004  | not_found        | 否     | 否     |
 | E1005  | request_too_large| 否     | 否     |
 | E2001  | rate_limited     | 是     | 是     |
-| E2002  | quota_exhausted  | 是     | 是     |
+| E2002  | quota_exhausted  | 否     | 是     |
 | E3001  | server_error     | 是     | 是     |
 | E3002  | overloaded       | 是     | 是     |
 | E3003  | timeout          | 是     | 是     |
@@ -157,6 +157,7 @@ client, _ := ailib.NewClientBuilder().
 - `internal/stream` — SSE 解码（openai_sse、anthropic_sse）
 - `internal/resilience` — 有界传输重试与退避（执行层）
 - `pkg/ailib` — 对外执行层 SDK（`Client`、`ClientBuilder`、能力模型）
+- `pkg/streaming` — 合规导向的流式/事件映射辅助（合规测试使用）
 - `pkg/contact` — 策略层辅助（多提供商故障转移的 `FallbackClient`）
 - `tests/compliance` — 基于共享夹具的合规执行器
 
