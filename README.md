@@ -114,7 +114,7 @@ if err := stream.Err(); err != nil {
 
 ## 🔄 V2 Protocol Alignment
 
-`ai-lib-go` aligns with the **AI-Protocol V2** specification. **v0.6.0** includes V1/V2 manifest parsing, manifest-driven streaming decoder, standard error codes, and compliance test coverage.
+`ai-lib-go` aligns with the **AI-Protocol V2** specification. **v1.0.0** is the Wave-5 stable release (E/P separation, compliance hardening).
 
 ### Standard Error Codes (V2, ARCH-003)
 

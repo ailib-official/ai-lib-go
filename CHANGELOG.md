@@ -2,6 +2,20 @@
 
 ## [Unreleased]
 
+## [v1.0.0] - 2026-07-01
+
+### Milestone
+
+- **Wave-5 v1.0.0**: E/P separation stable; GO-011 remediation merged; PT-073g sign-off.
+
+### Added
+
+- GO-011: retry body rebuild, streaming usage metadata, compliance prod runners (#4–#9).
+
+### Changed
+
+- Semver **1.0.0** — module tag `v1.0.0` for `github.com/ailib-official/ai-lib-go`.
+
 ## [v0.6.0] - 2026-05-07
 
 ### Added
