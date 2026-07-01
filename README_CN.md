@@ -98,7 +98,7 @@ if err := stream.Err(); err != nil {
 
 ## 🔄 V2 协议对齐
 
-`ai-lib-go` 与 **AI-Protocol V2** 规范对齐。**v0.6.0** 包含 V1/V2 manifest 解析、manifest 驱动的流式解码器、标准错误码及合规测试覆盖。
+`ai-lib-go` 与 **AI-Protocol V2** 规范对齐。**v1.0.0** 为 Wave-5 稳定版（E/P 分离、合规加固）。
 
 ### 标准错误码（V2，ARCH-003）
 
