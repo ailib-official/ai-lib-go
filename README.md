@@ -1,32 +1,30 @@
 # ai-lib-go
 
-**Official Go Runtime for AI-Protocol** - A high-performance, idiomatic Go implementation for unified AI model interaction.
+**Protocol runtime for [AI-Protocol](https://github.com/ailib-official/ai-protocol)** — Go reference implementation (**v1.0.0**, Go 1.21+).
 
-[![Go 1.21+](https://img.shields.io/badge/go-1.21+-00ADD8.svg)](https://go.dev/)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green.svg)](LICENSE-MIT)
+`ai-lib-go` splits execution and policy across two public packages:
 
-## 🎯 Design Philosophy
+| Package | Layer | Role |
+|---------|-------|------|
+| `github.com/ailib-official/ai-lib-go/pkg/ailib` | Execution (E) | `Client`, manifest-aware HTTP chat, capability endpoints |
+| `github.com/ailib-official/ai-lib-go/pkg/contact` | Policy (P) | `FallbackClient`, circuit-breaker policy, health snapshots |
 
-`ai-lib-go` is the official Go runtime implementation for the [AI-Protocol](https://github.com/ailib-official/ai-protocol) specification. It embodies the core design principle:
+## How it works
 
-> **一切逻辑皆算子，一切配置皆协议** (All logic is operators, all configuration is protocol)
+**Default chat path (`pkg/ailib`):** load manifest (optional) → build JSON payload → resolve endpoint/auth from manifest → HTTP via `net/http` → micro-retry (`internal/resilience`) → parse response → populate `ExecutionMetadata`.
 
-Unlike traditional adapter libraries that hardcode provider-specific logic, `ai-lib-go` is a **protocol-driven runtime** that executes AI-Protocol specifications. This means:
+**Without a manifest:** `WithBaseURL` + `WithAPIKey` uses OpenAI-compatible defaults (`/chat/completions`, `openai_sse` decoder). This is an escape hatch, not the primary integration mode.
 
-- **Zero hardcoded provider logic**: All behavior is driven by protocol manifests (YAML/JSON configurations)
-- **Operator-based architecture**: Streaming uses manifest-driven decoders (openai_sse, anthropic_sse) with composable pipeline
-- **Unified interface**: Developers interact with a single, consistent API regardless of the underlying provider
-- **Cross-runtime consistency**: Aligned with ai-lib-rust, ai-lib-python, ai-lib-ts via shared compliance tests
+**Streaming:** `ChatStream` → SSE decoder from manifest (default `openai_sse`) → `Stream.Next()` / `Event()`.
 
-## 🚀 Quick Start
+There is no public operator `Pipeline` API; chat is direct HTTP + decoder.
 
-### Installation
+## Quick start (protocol-first)
 
 ```bash
-go get github.com/ailib-official/ai-lib-go
+go get github.com/ailib-official/ai-lib-go@v1.0.0
+export OPENAI_API_KEY="your-key"
 ```
-
-### Basic Usage
 
 ```go
 package main
@@ -40,8 +38,13 @@ import (
 )
 
 func main() {
+	manifestYAML := `id: openai
+protocol_version: "2.0"
+endpoint:
+  base_url: "https://api.openai.com/v1"
+`
 	client, err := ailib.NewClientBuilder().
-		WithBaseURL("https://api.openai.com/v1").
+		WithProtocolData([]byte(manifestYAML)).
 		WithAPIKey(os.Getenv("OPENAI_API_KEY")).
 		Build()
 	if err != nil {
@@ -50,30 +53,28 @@ func main() {
 	defer client.Close()
 
 	resp, err := client.Chat(context.Background(), []ailib.Message{
-		{Role: ailib.RoleUser, Content: "Hello! What's 2+2?"},
+		{Role: ailib.RoleUser, Content: "Hello!"},
 	}, &ailib.ChatOptions{Model: "gpt-4o"})
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(resp.Choices[0].Message.Content)
+	fmt.Println("provider:", resp.ExecutionMetadata.ProviderID)
 }
 ```
 
-### HTTP and proxies (aligned with ai-lib-rust)
+Pattern source: `pkg/ailib/client_execution_metadata_test.go`.
 
-Rust `ai-lib-core` builds HTTP clients with optional proxy routes from, in order: `AI_PROXY_URL`, `HTTPS_PROXY`, `HTTP_PROXY`. Use `NO_PROXY` (and where supported, `AI_PROXY_NO_PROXY`) so provider endpoints that must be direct are excluded when a corporate proxy is set.
+### BaseURL-only mode (OpenAI-compatible)
 
-`ai-lib-go` does not read those env vars automatically. Configure egress on the `*http.Client` you pass via `WithHTTPClient` (for example `Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}`), or rely on your process-wide proxy settings when using the default client.
+```go
+client, err := ailib.NewClientBuilder().
+	WithBaseURL("https://api.openai.com/v1").
+	WithAPIKey(os.Getenv("OPENAI_API_KEY")).
+	Build()
+```
 
-### BYOK credential chain
-
-ai-lib-go resolves provider credentials through the PT-074 chain:
-
-1. explicit application override via `WithAPIKey`;
-2. manifest-declared env from `endpoint.auth` or V1 top-level `auth`;
-3. conventional `<PROVIDER_ID>_API_KEY`.
-
-Request auth attachment follows the active manifest auth shape (`bearer`, custom header, or query parameter). Runtime diagnostics should expose only source metadata and env var names, not raw credential values.
+Use when you do not have a local manifest checkout; behavior uses baked-in OpenAI-style paths.
 
 ### Streaming
 
@@ -85,117 +86,83 @@ if err != nil {
 defer stream.Close()
 
 for stream.Next() {
-	ev := stream.Event()
-	if ev.Delta != "" {
+	if ev := stream.Event(); ev.Delta != "" {
 		fmt.Print(ev.Delta)
 	}
 }
-if err := stream.Err(); err != nil {
-	return err
-}
+return stream.Err()
 ```
 
-## ✨ Features
+### Policy layer: fallback client
 
-- **Protocol-Driven**: All behavior is driven by YAML/JSON protocol files
-- **Unified Interface**: Single API for all AI providers (OpenAI, Anthropic, Gemini, DeepSeek, etc.)
-- **Streaming First**: Native streaming with `Stream` interface and manifest-driven decoder (openai_sse, anthropic_sse)
-- **Type Safe**: Full Go types for requests, responses, and errors
-- **Production Ready**: Built-in retry, circuit breaker, and fallback executor
-- **Extensible**: Easy to add new providers via protocol configuration
-- **Multimodal**: Support for text, images, audio, video
-- **Capability Guard**: E1005 for undeclared advanced features
-- **Embeddings**: Embedding generation
-- **Batch API**: BatchCreate, BatchGet, BatchCancel
-- **STT/TTS**: Speech-to-Text and Text-to-Speech
-- **Reranking**: Document reranking
-- **MCP**: MCP tool bridge (list/call)
-- **Fallback Client**: Health snapshot and circuit-breaker policy
+Circuit breaker + multi-provider fallback live in **`pkg/contact`**, not `pkg/ailib`:
 
-## 🔄 V2 Protocol Alignment
+```go
+import (
+	"github.com/ailib-official/ai-lib-go/pkg/ailib"
+	"github.com/ailib-official/ai-lib-go/pkg/contact"
+)
 
-`ai-lib-go` aligns with the **AI-Protocol V2** specification. **v1.0.0** is the Wave-5 stable release (E/P separation, compliance hardening).
+primary, _ := ailib.NewClientBuilder(). /* ... */ Build()
+secondary, _ := ailib.NewClientBuilder(). /* ... */ Build()
 
-### Standard Error Codes (V2, ARCH-003)
+fb := contact.NewFallbackClient([]ailib.Client{primary, secondary})
+resp, err := fb.Chat(ctx, messages, opts)
+```
 
-All provider errors are classified into 13 standard error codes with unified retry/fallback semantics:
+## Public API (`pkg/ailib`)
 
-| Code   | Name             | Retryable | Fallbackable |
-|--------|------------------|-----------|--------------|
-| E1001  | invalid_request  | No        | No           |
-| E1002  | authentication   | No        | Yes          |
-| E1003  | permission_denied| No        | No           |
-| E1004  | not_found        | No        | No           |
-| E1005  | request_too_large| No        | No           |
-| E2001  | rate_limited     | Yes       | Yes          |
-| E2002  | quota_exhausted  | No        | Yes          |
-| E3001  | server_error     | Yes       | Yes          |
-| E3002  | overloaded       | Yes       | Yes          |
-| E3003  | timeout          | Yes       | Yes          |
-| E4001  | conflict         | Yes       | No           |
-| E4002  | cancelled        | No        | No           |
-| E9999  | unknown          | No        | No           |
+`Client` interface:
 
-Classification follows: manifest `error_classification` → provider code/type → HTTP status → `E9999`.
+- `Chat`, `ChatStream`
+- Capability-gated HTTP routes: `Embeddings`, `BatchCreate`/`BatchGet`/`BatchCancel`, `STTTranscribe`, `TTSSpeak`, `Rerank`, `MCPListTools`, `MCPCallTool`, `ComputerUse`, `Reason`, `VideoGenerate`, `VideoGet`
+- `Close`
 
-### Compliance Tests
+Undeclared capabilities return **E1005** (`request_too_large` name in `StandardErrorName` — also used as capability gate).
 
-Cross-runtime behavioral consistency is verified by a shared YAML-based test suite from the `ai-protocol` repository:
+Types: `Message`, `ChatOptions`, `ChatResponse`, `StreamingEvent`, `ExecutionMetadata`, `ExecutionUsage`, standard error constants **E1001–E9999**.
+
+## Honest capability boundaries
+
+| Area | In the module | Not included |
+|------|---------------|--------------|
+| **MCP** | Manifest HTTP routes + capability gate | MCP wire-protocol client |
+| **Computer Use** | HTTP route + request/response types | Action execution sandbox |
+| **Multimodal** | `Message.Content` as pass-through JSON | High-level multimodal builders |
+| **Retry** | E-layer micro-retry on non-stream chat | Circuit breaker (P-layer only) |
+| **Circuit breaker / fallback** | `pkg/contact.FallbackClient` | Not on bare `pkg/ailib.Client` |
+
+## API keys (BYOK chain)
+
+1. `WithAPIKey` override
+2. Manifest `endpoint.auth` env
+3. `<PROVIDER_ID>_API_KEY`
+
+## Proxies
+
+Go does **not** auto-read `AI_PROXY_URL` / `HTTP_PROXY`. Pass a custom `*http.Client` via `WithHTTPClient` (e.g. `Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}`).
+
+Cross-runtime notes: [CROSS_RUNTIME.md](https://github.com/ailib-official/ai-protocol/blob/main/docs/CROSS_RUNTIME.md).
+
+## Testing
 
 ```bash
-# Run unit tests
 go test ./...
-
-# Run compliance tests (requires ai-protocol in workspace or COMPLIANCE_DIR)
-COMPLIANCE_DIR=../ai-protocol/tests/compliance go test ./tests/compliance/...
 ```
 
-For details, see [CROSS_RUNTIME.md](https://github.com/ailib-official/ai-protocol/blob/main/docs/CROSS_RUNTIME.md).
-
-### Testing with ai-protocol-mock
-
-For integration tests without real API calls, use [ai-protocol-mock](https://github.com/ailib-official/ai-protocol-mock):
+Compliance (shared YAML):
 
 ```bash
-# Start mock server (from ai-protocol-mock repo)
-docker-compose up -d
-
-# Run tests with mock base URL
-client, _ := ailib.NewClientBuilder().
-	WithBaseURL("http://localhost:4010").
-	WithAPIKey("test-key").
-	Build()
+COMPLIANCE_DIR=../ai-protocol/tests/compliance go test ./tests/compliance/ -v
 ```
 
-## 📁 Package Layout
+## Related
 
-- `internal/protocol` — manifest model/loader, capability metadata, streaming decoder format
-- `internal/stream` — SSE decoding (openai_sse, anthropic_sse)
-- `internal/resilience` — bounded transport retry / backoff (execution layer)
-- `pkg/ailib` — public execution-layer SDK (`Client`, `ClientBuilder`, capabilities)
-- `pkg/streaming` — compliance-oriented stream/event mapping helpers (used by compliance tests)
-- `pkg/contact` — policy-layer helpers (`FallbackClient` for multi-provider failover)
-- `tests/compliance` — fixture-driven compliance runner
+- [AI-Protocol](https://github.com/ailib-official/ai-protocol)
+- [ai-lib-rust](https://github.com/ailib-official/ai-lib-rust)
+- [ai-lib-python](https://github.com/ailib-official/ai-lib-python)
+- [ai-lib-ts](https://github.com/ailib-official/ai-lib-ts)
 
-## 🗺️ Ecosystem
+## License
 
-| Project          | Purpose                    |
-|------------------|----------------------------|
-| ai-protocol      | Spec, schemas, manifests   |
-| ai-lib-rust      | Rust runtime               |
-| ai-lib-python    | Python runtime             |
-| ai-lib-ts        | TypeScript runtime         |
-| **ai-lib-go**    | **Go runtime**             |
-| ai-protocol-mock | Mock server for testing    |
-| spiderswitch     | MCP-based model switching  |
-| ailib.info       | Documentation site         |
-
-## 📜 Release Policy
-
-- Versioning follows semver and matrix release train
-- Runtime release must align with `ai-protocol` compatibility window
-- Public site sync (`ailib.info`) happens after runtime release closure
-
-## 📄 License
-
-MIT OR Apache-2.0
+Dual-licensed under [Apache-2.0](LICENSE-APACHE) or [MIT](LICENSE-MIT).
