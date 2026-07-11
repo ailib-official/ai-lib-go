@@ -2,6 +2,14 @@
 
 ## [Unreleased]
 
+## [Unreleased]
+
+## [v1.0.1] - 2026-07-11
+
+### Fixed
+
+- **ALG-EMB-001 / XR-EMB**: Audit confirms embeddings/rerank use `protocol.EndpointFor` with path-only fallbacks; add regression tests (no silent vendor hosts).
+
 ## [v1.0.0] - 2026-07-01
 
 ### Milestone

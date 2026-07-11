@@ -1,6 +1,6 @@
 # ai-lib-go
 
-**Protocol runtime for [AI-Protocol](https://github.com/ailib-official/ai-protocol)** — Go reference implementation (**v1.0.0**, Go 1.21+).
+**Protocol runtime for [AI-Protocol](https://github.com/ailib-official/ai-protocol)** — Go reference implementation (**v1.0.1**, Go 1.21+).
 
 `ai-lib-go` splits execution and policy across two public packages:
 
@@ -22,7 +22,7 @@ There is no public operator `Pipeline` API; chat is direct HTTP + decoder.
 ## Quick start (protocol-first)
 
 ```bash
-go get github.com/ailib-official/ai-lib-go@v1.0.0
+go get github.com/ailib-official/ai-lib-go@v1.0.1
 export OPENAI_API_KEY="your-key"
 ```
 
