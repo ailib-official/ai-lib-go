@@ -1,6 +1,9 @@
 package protocol
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestLoaderParsesCurrentV2Shape(t *testing.T) {
 	loader := NewLoader()
@@ -88,5 +91,42 @@ func TestIsJSONDetectsPathExtension(t *testing.T) {
 	}
 	if isJSON("provider.yaml", []byte("key: value")) {
 		t.Fatalf("yaml path should not be treated as json")
+	}
+}
+
+// TestEndpointForEmbeddingsRerankXREmb asserts XR-EMB contract:
+// EndpointFor returns path-only fallbacks, never vendor hosts.
+func TestEndpointForEmbeddingsRerankXREmb(t *testing.T) {
+	empty := &V2Manifest{ID: "mock", ProtocolVersion: "2.0"}
+	embPath, embMethod := EndpointFor(empty, "embeddings", "/embeddings")
+	if embPath != "/embeddings" || embMethod != "POST" {
+		t.Fatalf("embeddings fallback: got %s %s", embPath, embMethod)
+	}
+	rerankPath, rerankMethod := EndpointFor(empty, "rerank", "/rerank")
+	if rerankPath != "/rerank" || rerankMethod != "POST" {
+		t.Fatalf("rerank fallback: got %s %s", rerankPath, rerankMethod)
+	}
+
+	withMap := &V2Manifest{
+		ID:              "mock",
+		ProtocolVersion: "2.0",
+		Endpoints: map[string]any{
+			"embeddings": map[string]any{"path": "/custom/embed"},
+			"rerank":     map[string]any{"path": "/custom/rerank"},
+		},
+	}
+	p, _ := EndpointFor(withMap, "embeddings", "/embeddings")
+	if p != "/custom/embed" {
+		t.Fatalf("embeddings path from map: got %s", p)
+	}
+	p, _ = EndpointFor(withMap, "rerank", "/rerank")
+	if p != "/custom/rerank" {
+		t.Fatalf("rerank path from map: got %s", p)
+	}
+
+	for _, path := range []string{embPath, rerankPath, p} {
+		if strings.Contains(path, "api.openai.com") || strings.Contains(path, "api.cohere.com") {
+			t.Fatalf("vendor host leaked into path: %s", path)
+		}
 	}
 }
