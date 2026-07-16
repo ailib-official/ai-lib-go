@@ -11,6 +11,7 @@ import (
 
 type V1Manifest struct {
 	ID              string               `yaml:"id" json:"id"`
+	Aliases         []string             `yaml:"aliases" json:"aliases"`
 	ProtocolVersion string               `yaml:"protocol_version" json:"protocol_version"`
 	BaseURL         string               `yaml:"base_url" json:"base_url"`
 	APIFormat       string               `yaml:"api_format" json:"api_format"`
@@ -82,6 +83,7 @@ type EndpointConfig struct {
 
 type V2Manifest struct {
 	ID                string               `yaml:"id" json:"id"`
+	Aliases           []string             `yaml:"aliases" json:"aliases"`
 	ProtocolVersion   string               `yaml:"protocol_version" json:"protocol_version"`
 	Endpoint          EndpointConfig       `yaml:"endpoint" json:"endpoint"`
 	Endpoints         map[string]any       `yaml:"endpoints" json:"endpoints"`
