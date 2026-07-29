@@ -2,7 +2,9 @@
 
 ## [Unreleased]
 
-## [Unreleased]
+### Added
+
+- **GO-ID-001**: `internal/protocol.Loader.LoadProvider` prefers published `dist/` manifests, then source YAML/JSON; resolves marketplace aliases via `dist/provider-identity.json` (e.g. `google` → `gemini`, `kimi` → `moonshot`). Parse/validation errors are not masked by alias fallthrough. CI protocol pin aligned with ALR-PROTO-PIN-003.
 
 ## [v1.0.1] - 2026-07-11
 

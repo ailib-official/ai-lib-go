@@ -1,32 +1,36 @@
 # ai-lib-go
 
-**AI-Protocol 官方 Go 运行时** - 统一 AI 模型交互的高性能、惯用 Go 实现。
+**[AI-Protocol](https://github.com/ailib-official/ai-protocol) 协议运行时** — Go 参考实现（**v1.0.1**，Go 1.21+）。
 
-[![Go 1.21+](https://img.shields.io/badge/go-1.21+-00ADD8.svg)](https://go.dev/)
-[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-green.svg)](LICENSE)
+[English](README.md)
 
-## 🎯 设计理念
+`ai-lib-go` 将执行层与策略层拆到两个公共包：
 
-`ai-lib-go` 是 [AI-Protocol](https://github.com/ailib-official/ai-protocol) 规范的**官方 Go 运行时**实现。它体现了核心设计原则：
+| 包 | 层级 | 职责 |
+|----|------|------|
+| `github.com/ailib-official/ai-lib-go/pkg/ailib` | 执行层 (E) | `Client`、清单驱动的 HTTP 对话、能力端点 |
+| `github.com/ailib-official/ai-lib-go/pkg/contact` | 策略层 (P) | `FallbackClient`、熔断策略、`HealthSnapshot` |
 
-> **一切逻辑皆算子，一切配置皆协议** (All logic is operators, all configuration is protocol)
+> **说明：** Git `main` 可能包含晚于最近模块标签（`v1.0.1`）合入的协议/身份能力。请按目标 tag 执行 `go get`；见 [CHANGELOG](CHANGELOG.md) `Unreleased`（GO-ID-001 别名解析）。
 
-与传统的适配器库硬编码特定提供商逻辑不同，`ai-lib-go` 是一个**协议驱动的运行时**，执行 AI-Protocol 规范。这意味着：
+## 工作原理
 
-- **零硬编码提供商逻辑**：所有行为都由协议清单（YAML/JSON 配置）驱动
-- **基于算子的架构**：流式处理使用 manifest 驱动的解码器（openai_sse、anthropic_sse），支持可组合流水线
-- **统一接口**：开发者与单一、一致的 API 交互，无论底层提供商是什么
-- **跨运行时一致**：通过共享合规测试与 ai-lib-rust、ai-lib-python、ai-lib-ts 对齐
+**默认对话路径（`pkg/ailib`）：** 加载清单（可选）→ 构造 JSON → 从清单解析 endpoint/鉴权 → `net/http` 发送 → 微重试（`internal/resilience`）→ 解析响应 → 填充 `ExecutionMetadata`。
 
-## 🚀 快速入门
+**无清单时：** `WithBaseURL` + `WithAPIKey` 使用 OpenAI 兼容默认（`/chat/completions`、`openai_sse` 解码器）。这是逃生舱，不是主集成模式。
 
-### 安装
+**流式：** `ChatStream` → 清单指定的 SSE 解码器（默认 `openai_sse`）→ `Stream.Next()` / `Event()`。成功流结束后先 `Close()`，再取 `ExecutionMetadata()`。
+
+没有公开的算子 `Pipeline` API；对话是直接 HTTP + 解码器。
+
+能力端点（embeddings、batch、STT/TTS、rerank、MCP、computer use、reasoning、video）通过 `protocol.EndpointFor` 解析，仅回退到**路径**（如 `/embeddings`、`/rerank`），不会静默写入厂商主机。
+
+## 快速开始（协议优先）
 
 ```bash
-go get github.com/ailib-official/ai-lib-go
+go get github.com/ailib-official/ai-lib-go@v1.0.1
+export OPENAI_API_KEY="your-key"
 ```
-
-### 基础用法
 
 ```go
 package main
@@ -40,6 +44,11 @@ import (
 )
 
 func main() {
+	manifestYAML := `id: openai
+protocol_version: "2.0"
+endpoint:
+  base_url: "https://api.openai.com/v1"
+`
 	client, err := ailib.NewClientBuilder().
 		WithProtocolData([]byte(manifestYAML)).
 		WithAPIKey(os.Getenv("OPENAI_API_KEY")).
@@ -50,14 +59,28 @@ func main() {
 	defer client.Close()
 
 	resp, err := client.Chat(context.Background(), []ailib.Message{
-		{Role: ailib.RoleUser, Content: "你好！2+2 等于多少？"},
+		{Role: ailib.RoleUser, Content: "你好！"},
 	}, &ailib.ChatOptions{Model: "gpt-4o"})
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(resp.Choices[0].Message.Content)
+	fmt.Println("provider:", resp.ExecutionMetadata.ProviderID)
 }
 ```
+
+示例来源：`pkg/ailib/client_execution_metadata_test.go`。
+
+### 仅 BaseURL 模式（OpenAI 兼容）
+
+```go
+client, err := ailib.NewClientBuilder().
+	WithBaseURL("https://api.openai.com/v1").
+	WithAPIKey(os.Getenv("OPENAI_API_KEY")).
+	Build()
+```
+
+适用于本地没有清单仓库时；行为使用内置 OpenAI 风格路径。
 
 ### 流式调用
 
@@ -69,117 +92,134 @@ if err != nil {
 defer stream.Close()
 
 for stream.Next() {
-	ev := stream.Event()
-	if ev.Delta != "" {
+	if ev := stream.Event(); ev.Delta != "" {
 		fmt.Print(ev.Delta)
 	}
 }
 if err := stream.Err(); err != nil {
 	return err
 }
+if meta, ok := stream.ExecutionMetadata(); ok {
+	_ = meta // provider_id、model_id、usage、micro_retry_count
+}
+return nil
 ```
 
-## ✨ 特性
+### 策略层：回退客户端
 
-- **协议驱动**：所有行为由 YAML/JSON 协议文件驱动
-- **统一接口**：单一 API 支持所有 AI 提供商（OpenAI、Anthropic、Gemini、DeepSeek 等）
-- **流式优先**：原生流式接口，支持 manifest 驱动的解码器（openai_sse、anthropic_sse）
-- **类型安全**：完整的 Go 类型定义
-- **生产就绪**：内置重试、熔断和回退执行器
-- **易于扩展**：通过协议配置轻松添加新提供商
-- **多模态支持**：支持文本、图像、音频、视频
-- **能力门禁**：未声明高级能力快速失败（E1005）
-- **向量嵌入**：Embeddings API
-- **批处理**：BatchCreate、BatchGet、BatchCancel
-- **STT/TTS**：语音转文字与文字转语音
-- **重排序**：文档重排序
-- **MCP**：MCP 工具桥接（list/call）
-- **回退客户端**：健康快照与熔断策略
+熔断与多提供商回退在 **`pkg/contact`**，不在 `pkg/ailib`：
 
-## 🔄 V2 协议对齐
+```go
+import (
+	"github.com/ailib-official/ai-lib-go/pkg/ailib"
+	"github.com/ailib-official/ai-lib-go/pkg/contact"
+)
 
-`ai-lib-go` 与 **AI-Protocol V2** 规范对齐。**v1.0.0** 为 Wave-5 稳定版（E/P 分离、合规加固）。
+primary, _ := ailib.NewClientBuilder(). /* ... */ Build()
+secondary, _ := ailib.NewClientBuilder(). /* ... */ Build()
 
-### 标准错误码（V2，ARCH-003）
-
-所有 provider 错误被分类为 13 个标准错误码，具有统一的重试/回退语义：
-
-| 错误码 | 名称             | 可重试 | 可回退 |
-|--------|------------------|--------|--------|
-| E1001  | invalid_request  | 否     | 否     |
-| E1002  | authentication   | 否     | 是     |
-| E1003  | permission_denied| 否     | 否     |
-| E1004  | not_found        | 否     | 否     |
-| E1005  | request_too_large| 否     | 否     |
-| E2001  | rate_limited     | 是     | 是     |
-| E2002  | quota_exhausted  | 否     | 是     |
-| E3001  | server_error     | 是     | 是     |
-| E3002  | overloaded       | 是     | 是     |
-| E3003  | timeout          | 是     | 是     |
-| E4001  | conflict         | 是     | 否     |
-| E4002  | cancelled        | 否     | 否     |
-| E9999  | unknown          | 否     | 否     |
-
-分类优先级：manifest `error_classification` → provider code/type → HTTP 状态码 → `E9999`。
-
-### 合规测试
-
-跨运行时行为一致性通过 `ai-protocol` 仓库中的共享 YAML 测试套件验证：
-
-```bash
-# 运行单元测试
-go test ./pkg/ailib/...
-
-# 运行合规测试（需在工作区包含 ai-protocol 或设置 COMPLIANCE_DIR）
-COMPLIANCE_DIR=../ai-protocol/tests/compliance go test ./tests/compliance/...
+fb := contact.NewFallbackClient(primary, secondary)
+resp, err := fb.Chat(ctx, messages, opts)
+_ = fb.HealthSnapshot() // 各提供商熔断状态
 ```
 
-详见 [CROSS_RUNTIME.md](https://github.com/ailib-official/ai-protocol/blob/main/docs/CROSS_RUNTIME.md)。
+`NewFallbackClientWithPolicy` 可传入自定义 `FallbackPolicy`（`FailureThreshold`、`CircuitOpenFor`）。
 
-### 使用 ai-protocol-mock 测试
+## 公共 API（`pkg/ailib`）
 
-无需真实 API 调用的集成测试，可使用 [ai-protocol-mock](https://github.com/ailib-official/ai-protocol-mock)：
+**构建器：** `NewClientBuilder` → `WithProtocolPath` / `WithProtocolData` / `WithBaseURL` / `WithAPIKey` / `WithHeader` / `WithTimeout` / `WithMaxRetries` / `WithHTTPClient` → `Build()`。协议数据、协议路径、BaseURL 三者必选其一。
+
+**`Client` 接口：**
+
+- `Chat`、`ChatStream`
+- 能力门禁 HTTP 路由：`Embeddings`、`BatchCreate`/`BatchGet`/`BatchCancel`、`STTTranscribe`、`TTSSpeak`、`Rerank`、`MCPListTools`、`MCPCallTool`、`ComputerUse`、`Reason`、`VideoGenerate`、`VideoGet`
+- `Close`
+
+未声明能力返回 **E1005**（`ErrUnsupported`；`StandardErrorName` 映射为 `request_too_large` — 同时用作能力门禁）。
+
+**类型：** `Message`、`ChatOptions`、`ChatResponse`、`StreamingEvent`、`Stream`、`ExecutionMetadata`、`ExecutionUsage`、`ExecutionResult`、能力请求/响应结构体、标准错误常量 **E1001–E9999**、`IsRetryableCode` / `IsFallbackableCode`。
+
+**`pkg/streaming`：** 面向合规的 SSE / 事件映射辅助（合规测试使用；普通 `Client.ChatStream` 不必依赖）。
+
+## 能力边界（如实说明）
+
+| 领域 | 模块内有 | 不包含 |
+|------|----------|--------|
+| **MCP** | 清单 HTTP 路由 + 能力门禁 | MCP 线协议客户端 |
+| **Computer Use** | HTTP 路由 + 请求/响应类型 | 动作执行沙箱 |
+| **多模态** | `Message.Content` JSON 透传 | 高层多模态构造器 |
+| **重试** | 非流式对话的 E 层微重试 | 熔断（仅 P 层） |
+| **熔断 / 回退** | `pkg/contact.FallbackClient` | 不在裸 `pkg/ailib.Client` 上 |
+| **提供商身份** | `internal/protocol.Loader.LoadProvider`（main / Unreleased） | 尚无公开的 `ClientBuilder.WithProviderID` |
+
+## 协议清单（加载器）
+
+`Client` 通过 `WithProtocolPath` / `WithProtocolData` 加载清单。按 id 查找时，`internal/protocol.Loader` 解析顺序为：
+
+1. `AI_PROTOCOL_DIR` / `AI_PROTOCOL_PATH`，或 `Loader.Root`，或邻近 `ai-protocol/` 检出
+2. 每个 id：`dist/v2/providers/<id>.json` → `dist/v1/...` → 源码树 `v2`/`v1` YAML|JSON
+3. **身份 / 别名（GO-ID-001，晚于 v1.0.1 的 `main`）：** 精确 id 缺失时，经 `dist/provider-identity.json`（多家族 map）将别名解析为规范 id，例如 `google` → `gemini`、`kimi` → `moonshot`。解析/校验错误不会被别名回退掩盖。
+
+## API 密钥（BYOK 链）
+
+1. `WithAPIKey` 覆盖
+2. 清单 `endpoint.auth` / 顶层 `auth` 声明的环境变量
+3. 约定式 `<PROVIDER_ID>_API_KEY`
+
+## 代理
+
+Go **不会**自动读取 `AI_PROXY_URL` / `HTTP_PROXY`。请通过 `WithHTTPClient` 传入自定义 `*http.Client`（例如 `Transport: &http.Transport{Proxy: http.ProxyFromEnvironment}`）。
+
+跨运行时说明：[CROSS_RUNTIME.md](https://github.com/ailib-official/ai-protocol/blob/main/docs/CROSS_RUNTIME.md)。
+
+## 标准错误码（V2）
+
+| 错误码 | 名称 | 可重试 | 可回退 |
+|--------|------|--------|--------|
+| E1001 | `invalid_request` | 否 | 否 |
+| E1002 | `authentication` | 否 | 是 |
+| E1003 | `permission_denied` | 否 | 否 |
+| E1004 | `not_found` | 否 | 否 |
+| E1005 | `request_too_large` | 否 | 否 |
+| E2001 | `rate_limited` | 是 | 是 |
+| E2002 | `quota_exhausted` | 否 | 是 |
+| E3001 | `server_error` | 是 | 是 |
+| E3002 | `overloaded` | 是 | 是 |
+| E3003 | `timeout` | 是 | 是 |
+| E4001 | `conflict` | 是 | 否 |
+| E4002 | `cancelled` | 否 | 否 |
+| E9999 | `unknown` | 否 | 否 |
+
+分类优先级：清单 `error_classification` → 提供商 code/type → HTTP 状态码 → `E9999`。
+
+## 测试
 
 ```bash
-# 启动 mock 服务（在 ai-protocol-mock 仓库中）
-docker-compose up -d
+go test ./...
+```
 
-# 使用 mock base URL 运行测试
+合规（共享 YAML）：
+
+```bash
+COMPLIANCE_DIR=../ai-protocol/tests/compliance go test ./tests/compliance/ -v
+```
+
+Mock 服务（[ai-protocol-mock](https://github.com/ailib-official/ai-protocol-mock)）：
+
+```bash
 client, _ := ailib.NewClientBuilder().
 	WithBaseURL("http://localhost:4010").
 	WithAPIKey("test-key").
 	Build()
 ```
 
-## 📁 目录结构
+## 相关链接
 
-- `internal/protocol` — manifest 契约、加载、能力元信息、流式解码格式
-- `internal/stream` — SSE 解码（openai_sse、anthropic_sse）
-- `internal/resilience` — 有界传输重试与退避（执行层）
-- `pkg/ailib` — 对外执行层 SDK（`Client`、`ClientBuilder`、能力模型）
-- `pkg/streaming` — 合规导向的流式/事件映射辅助（合规测试使用）
-- `pkg/contact` — 策略层辅助（多提供商故障转移的 `FallbackClient`）
-- `tests/compliance` — 基于共享夹具的合规执行器
+- [AI-Protocol](https://github.com/ailib-official/ai-protocol)
+- [ai-lib-rust](https://github.com/ailib-official/ai-lib-rust)
+- [ai-lib-python](https://github.com/ailib-official/ai-lib-python)
+- [ai-lib-ts](https://github.com/ailib-official/ai-lib-ts)
 
-## 🗺️ 生态定位
+## 许可证
 
-| 项目            | 用途                     |
-|-----------------|--------------------------|
-| ai-protocol     | 规范、Schema、Manifest   |
-| ai-lib-rust     | Rust 运行时             |
-| ai-lib-python   | Python 运行时           |
-| ai-lib-ts       | TypeScript 运行时       |
-| **ai-lib-go**   | **Go 运行时**           |
-| ai-protocol-mock| 测试用 Mock 服务        |
-| spiderswitch    | MCP 模型切换            |
-| ailib.info      | 文档站点                |
-
-## 📜 发布约定
-
-- 采用 semver，并按 ai-lib 矩阵发布节奏推进
-- 运行时发布需与 `ai-protocol` 兼容窗口对齐
-- `ailib.info` 站点对齐在运行时发布收敛后执行
-
-## 📄 许可证
-
-MIT OR Apache-2.0
+采用 [Apache-2.0](LICENSE-APACHE) 或 [MIT](LICENSE-MIT) 双许可。
