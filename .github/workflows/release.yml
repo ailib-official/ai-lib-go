@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ailib-official/ai-protocol
-          ref: 627a6ebb765a3810c52822e84fdee95bb1ee24a4
+          ref: 2743912f9a88d7255a23953d4a74b5d2b453fa2a
           path: ai-protocol
 
       - name: Set up Go

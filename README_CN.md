@@ -1,6 +1,6 @@
 # ai-lib-go
 
-**[AI-Protocol](https://github.com/ailib-official/ai-protocol) 协议运行时** — Go 参考实现（**v1.0.1**，Go 1.21+）。
+**[AI-Protocol](https://github.com/ailib-official/ai-protocol) 协议运行时** — Go 参考实现（**v1.1.0**，Go 1.21+）。
 
 [English](README.md)
 
@@ -11,7 +11,7 @@
 | `github.com/ailib-official/ai-lib-go/pkg/ailib` | 执行层 (E) | `Client`、清单驱动的 HTTP 对话、能力端点 |
 | `github.com/ailib-official/ai-lib-go/pkg/contact` | 策略层 (P) | `FallbackClient`、熔断策略、`HealthSnapshot` |
 
-> **说明：** Git `main` 可能包含晚于最近模块标签（`v1.0.1`）合入的协议/身份能力。请按目标 tag 执行 `go get`；见 [CHANGELOG](CHANGELOG.md) `Unreleased`（GO-ID-001 别名解析）。
+> **钉版本：** 优先模块标签 **`v1.1.0`**。CI 钉住 `ai-protocol` **v1.1.0**。见 [CHANGELOG](CHANGELOG.md)。
 
 ## 工作原理
 
@@ -28,7 +28,7 @@
 ## 快速开始（协议优先）
 
 ```bash
-go get github.com/ailib-official/ai-lib-go@v1.0.1
+go get github.com/ailib-official/ai-lib-go@v1.1.0
 export OPENAI_API_KEY="your-key"
 ```
 
@@ -158,7 +158,7 @@ _ = fb.HealthSnapshot() // 各提供商熔断状态
 
 1. `AI_PROTOCOL_DIR` / `AI_PROTOCOL_PATH`，或 `Loader.Root`，或邻近 `ai-protocol/` 检出
 2. 每个 id：`dist/v2/providers/<id>.json` → `dist/v1/...` → 源码树 `v2`/`v1` YAML|JSON
-3. **身份 / 别名（GO-ID-001，晚于 v1.0.1 的 `main`）：** 精确 id 缺失时，经 `dist/provider-identity.json`（多家族 map）将别名解析为规范 id，例如 `google` → `gemini`、`kimi` → `moonshot`。解析/校验错误不会被别名回退掩盖。
+3. **身份 / 别名（GO-ID-001）：** 精确 id 缺失时，经 `dist/provider-identity.json`（多家族 map）将别名解析为规范 id，例如 `google` → `gemini`、`kimi` → `moonshot`。解析/校验错误不会被别名回退掩盖。
 
 ## API 密钥（BYOK 链）
 
