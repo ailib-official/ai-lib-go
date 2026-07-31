@@ -20,3 +20,7 @@ vendor/
 .env
 .env.*
 *.log
+
+# Local CodeGraph index (do not commit)
+.codegraph/
+
