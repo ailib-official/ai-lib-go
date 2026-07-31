@@ -1,6 +1,6 @@
 # ai-lib-go
 
-**Protocol runtime for [AI-Protocol](https://github.com/ailib-official/ai-protocol)** — Go reference implementation (**v1.0.1**, Go 1.21+).
+**Protocol runtime for [AI-Protocol](https://github.com/ailib-official/ai-protocol)** — Go reference implementation (**v1.1.0**, Go 1.21+).
 
 [中文文档](README_CN.md)
 
@@ -11,7 +11,7 @@
 | `github.com/ailib-official/ai-lib-go/pkg/ailib` | Execution (E) | `Client`, manifest-aware HTTP chat, capability endpoints |
 | `github.com/ailib-official/ai-lib-go/pkg/contact` | Policy (P) | `FallbackClient`, circuit-breaker policy, `HealthSnapshot` |
 
-> **Note:** Git `main` may include protocol/identity work landed after the last module tag (`v1.0.1`). Match `go get` to the tag you intend; see [CHANGELOG](CHANGELOG.md) `Unreleased` (GO-ID-001 alias resolve).
+> **Pin:** Prefer module tag **`v1.1.0`**. CI pins `ai-protocol` **v1.1.0**. See [CHANGELOG](CHANGELOG.md).
 
 ## How it works
 
@@ -28,7 +28,7 @@ Capabilities (embeddings, batch, STT/TTS, rerank, MCP, computer use, reasoning, 
 ## Quick start (protocol-first)
 
 ```bash
-go get github.com/ailib-official/ai-lib-go@v1.0.1
+go get github.com/ailib-official/ai-lib-go@v1.1.0
 export OPENAI_API_KEY="your-key"
 ```
 
@@ -158,7 +158,7 @@ Undeclared capabilities return **E1005** (`ErrUnsupported`; `StandardErrorName` 
 
 1. `AI_PROTOCOL_DIR` / `AI_PROTOCOL_PATH`, or `Loader.Root`, or nearby `ai-protocol/` checkout
 2. Per id: `dist/v2/providers/<id>.json` → `dist/v1/...` → source `v2`/`v1` YAML|JSON
-3. **Identity / aliases (GO-ID-001, on `main` after v1.0.1):** if exact id is missing, alias → canonical via `dist/provider-identity.json` (multi-family map), e.g. `google` → `gemini`, `kimi` → `moonshot`. Parse/validation errors are never masked by alias fallthrough.
+3. **Identity / aliases (GO-ID-001):** if exact id is missing, alias → canonical via `dist/provider-identity.json` (multi-family map), e.g. `google` → `gemini`, `kimi` → `moonshot`. Parse/validation errors are never masked by alias fallthrough.
 
 ## API keys (BYOK chain)
 
