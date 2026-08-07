@@ -1,6 +1,6 @@
 # ai-lib-go
 
-**Protocol runtime for [AI-Protocol](https://github.com/ailib-official/ai-protocol)** — Go reference implementation (**v1.1.0**, Go 1.21+).
+**Protocol runtime for [AI-Protocol](https://github.com/ailib-official/ai-protocol)** — Go reference implementation (**v1.2.0**, Go 1.21+).
 
 [中文文档](README_CN.md)
 
@@ -11,7 +11,7 @@
 | `github.com/ailib-official/ai-lib-go/pkg/ailib` | Execution (E) | `Client`, manifest-aware HTTP chat, capability endpoints |
 | `github.com/ailib-official/ai-lib-go/pkg/contact` | Policy (P) | `FallbackClient`, circuit-breaker policy, `HealthSnapshot` |
 
-> **Pin:** Prefer module tag **`v1.1.0`**. CI pins `ai-protocol` **v1.1.0**. See [CHANGELOG](CHANGELOG.md).
+> **Pin:** Prefer module tag **`v1.2.0`**. CI pins `ai-protocol` **v1.2.0**. See [CHANGELOG](CHANGELOG.md).
 
 ## How it works
 
@@ -28,7 +28,7 @@ Capabilities (embeddings, batch, STT/TTS, rerank, MCP, computer use, reasoning, 
 ## Quick start (protocol-first)
 
 ```bash
-go get github.com/ailib-official/ai-lib-go@v1.1.0
+go get github.com/ailib-official/ai-lib-go@v1.2.0
 export OPENAI_API_KEY="your-key"
 ```
 
