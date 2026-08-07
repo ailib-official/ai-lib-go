@@ -155,67 +155,67 @@ func (c *client) Chat(ctx context.Context, messages []Message, opts *ChatOptions
 	return &out, nil
 }
 
-	func (c *client) ChatStream(ctx context.Context, messages []Message, opts *ChatOptions) (Stream, error) {
-		if len(messages) == 0 {
-			return nil, &APIError{Code: ErrInvalidRequest, StatusCode: 400, Message: "messages must not be empty"}
-		}
-		if opts == nil {
-			opts = &ChatOptions{}
-		}
-		payload := buildChatPayload(messages, opts, true)
-		path, method := protocol.EndpointFor(c.manifest, "chat_completions", "/chat/completions")
-		req, err := c.newRequest(ctx, method, path, payload)
-		if err != nil {
-			return nil, err
-		}
-		t0 := time.Now()
-		// GOV-007 / GO-001: reuse resilience for connection + HTTP setup only.
-		// Once the response body is open we commit (no mid-stream retry) — same
-		// commit-after-first-byte policy as ai-lib-rust streaming.
-		p := resilience.DefaultPolicy()
-		if c.maxRetries > 0 {
-			p.MaxAttempts = c.maxRetries
-		} else if m, ok := protocol.RetryMaxAttempts(c.manifest); ok {
-			p.MaxAttempts = m
-		}
-		var resp *http.Response
-		_, err = resilience.ExecuteAttempts(ctx, p, func(_ context.Context) error {
-			if req.GetBody != nil {
-				rc, gerr := req.GetBody()
-				if gerr != nil {
-					return gerr
-				}
-				req.Body = rc
-			}
-			r, derr := c.http.Do(req)
-			if derr != nil {
-				return derr
-			}
-			if r.StatusCode >= 400 {
-				defer r.Body.Close()
-				return parseHTTPError(c.manifest, r)
-			}
-			resp = r
-			return nil
-		}, isRetryableErr)
-		if err != nil {
-			return nil, err
-		}
-		tTrans := time.Now()
-		format := "openai_sse"
-		if c.manifest != nil {
-			format = protocol.StreamingDecoderFormat(c.manifest)
-		}
-		modelID := opts.Model
-		return &sseStream{
-			body:             resp.Body,
-			decoder:          stream.NewDecoderWithFormat(resp.Body, format),
-			started:          t0,
-			transDone:        tTrans,
-			providerID:       protocol.ManifestProviderID(c.manifest),
-			requestedModelID: modelID,
-		}, nil
+func (c *client) ChatStream(ctx context.Context, messages []Message, opts *ChatOptions) (Stream, error) {
+	if len(messages) == 0 {
+		return nil, &APIError{Code: ErrInvalidRequest, StatusCode: 400, Message: "messages must not be empty"}
 	}
+	if opts == nil {
+		opts = &ChatOptions{}
+	}
+	payload := buildChatPayload(messages, opts, true)
+	path, method := protocol.EndpointFor(c.manifest, "chat_completions", "/chat/completions")
+	req, err := c.newRequest(ctx, method, path, payload)
+	if err != nil {
+		return nil, err
+	}
+	t0 := time.Now()
+	// GOV-007 / GO-001: reuse resilience for connection + HTTP setup only.
+	// Once the response body is open we commit (no mid-stream retry) — same
+	// commit-after-first-byte policy as ai-lib-rust streaming.
+	p := resilience.DefaultPolicy()
+	if c.maxRetries > 0 {
+		p.MaxAttempts = c.maxRetries
+	} else if m, ok := protocol.RetryMaxAttempts(c.manifest); ok {
+		p.MaxAttempts = m
+	}
+	var resp *http.Response
+	_, err = resilience.ExecuteAttempts(ctx, p, func(_ context.Context) error {
+		if req.GetBody != nil {
+			rc, gerr := req.GetBody()
+			if gerr != nil {
+				return gerr
+			}
+			req.Body = rc
+		}
+		r, derr := c.http.Do(req)
+		if derr != nil {
+			return derr
+		}
+		if r.StatusCode >= 400 {
+			defer r.Body.Close()
+			return parseHTTPError(c.manifest, r)
+		}
+		resp = r
+		return nil
+	}, isRetryableErr)
+	if err != nil {
+		return nil, err
+	}
+	tTrans := time.Now()
+	format := "openai_sse"
+	if c.manifest != nil {
+		format = protocol.StreamingDecoderFormat(c.manifest)
+	}
+	modelID := opts.Model
+	return &sseStream{
+		body:             resp.Body,
+		decoder:          stream.NewDecoderWithFormat(resp.Body, format),
+		started:          t0,
+		transDone:        tTrans,
+		providerID:       protocol.ManifestProviderID(c.manifest),
+		requestedModelID: modelID,
+	}, nil
+}
 
 func (c *client) Embeddings(ctx context.Context, req EmbeddingRequest) (*EmbeddingResponse, error) {
 	if err := c.requireCapability("embeddings"); err != nil {
