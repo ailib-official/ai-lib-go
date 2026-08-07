@@ -1,6 +1,6 @@
 # ai-lib-go
 
-**[AI-Protocol](https://github.com/ailib-official/ai-protocol) 协议运行时** — Go 参考实现（**v1.1.0**，Go 1.21+）。
+**[AI-Protocol](https://github.com/ailib-official/ai-protocol) 协议运行时** — Go 参考实现（**v1.2.0**，Go 1.21+）。
 
 [English](README.md)
 
@@ -11,7 +11,7 @@
 | `github.com/ailib-official/ai-lib-go/pkg/ailib` | 执行层 (E) | `Client`、清单驱动的 HTTP 对话、能力端点 |
 | `github.com/ailib-official/ai-lib-go/pkg/contact` | 策略层 (P) | `FallbackClient`、熔断策略、`HealthSnapshot` |
 
-> **钉版本：** 优先模块标签 **`v1.1.0`**。CI 钉住 `ai-protocol` **v1.1.0**。见 [CHANGELOG](CHANGELOG.md)。
+> **钉版本：** 优先模块标签 **`v1.2.0`**。CI 钉住 `ai-protocol` **v1.2.0**。见 [CHANGELOG](CHANGELOG.md)。
 
 ## 工作原理
 
@@ -28,7 +28,7 @@
 ## 快速开始（协议优先）
 
 ```bash
-go get github.com/ailib-official/ai-lib-go@v1.1.0
+go get github.com/ailib-official/ai-lib-go@v1.2.0
 export OPENAI_API_KEY="your-key"
 ```
 

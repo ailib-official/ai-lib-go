@@ -2,6 +2,13 @@
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-08-07
+
+### Milestone
+
+- **GOV-007 Wave2**: Retry drivers / transport hygiene train. Module tag **v1.2.0**. PROTO-PIN ai-protocol **v1.2.0** (d61b701).
+
+
 ## [v1.1.0] - 2026-07-31
 
 ### Changed
