@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **PROTO-PIN**: CI checkouts `ailib-official/ai-protocol` `29015b4` (PT-TTC-012 +
+  PT-GEN-003; module protocol still 1.2.0). Same pin class as ai-lib-python #31.
+  No text-tool parser in this runtime.
+
 ## [1.2.0] - 2026-08-07
 
 ### Milestone
