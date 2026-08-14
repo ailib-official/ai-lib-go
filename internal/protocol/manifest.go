@@ -23,6 +23,7 @@ type V1Manifest struct {
 	Endpoints       map[string]any       `yaml:"endpoints" json:"endpoints"`
 	Streaming       *StreamingConfig     `yaml:"streaming" json:"streaming"`
 	ResponsePaths   *ResponsePathsConfig `yaml:"response_paths" json:"response_paths"`
+	Metadata        *ManifestMetadata    `yaml:"metadata" json:"metadata"`
 }
 
 type StreamingConfig struct {
@@ -93,6 +94,7 @@ type V2Manifest struct {
 	CapabilityProfile *CapabilityProfile   `yaml:"capability_profile" json:"capability_profile"`
 	Streaming         *StreamingConfig     `yaml:"streaming" json:"streaming"`
 	ResponsePaths     *ResponsePathsConfig `yaml:"response_paths" json:"response_paths"`
+	Metadata          *ManifestMetadata    `yaml:"metadata" json:"metadata"`
 	// Backward-compatible alias for old local fixtures.
 	Core *V2CoreLegacy `yaml:"core" json:"core"`
 }
@@ -118,6 +120,66 @@ type V2Caps struct {
 	Required     []string        `yaml:"required" json:"required"`
 	Optional     []string        `yaml:"optional" json:"optional"`
 	FeatureFlags map[string]bool `yaml:"feature_flags" json:"feature_flags"`
+}
+
+// ManifestMetadata is Experimental ME-001 / PT-GEN-001 model-level facts.
+type ManifestMetadata struct {
+	Models map[string]MetadataModelEntry `yaml:"models" json:"models"`
+}
+
+// MetadataModelEntry is a subset of metadata.models.<id>.
+type MetadataModelEntry struct {
+	ModelCapabilities *ModelCapabilityFacts `yaml:"model_capabilities" json:"model_capabilities"`
+}
+
+// ModelCapabilityFacts uses pointers so omit ≠ false.
+type ModelCapabilityFacts struct {
+	ImageGeneration *bool `yaml:"image_generation" json:"image_generation"`
+	SpeechToText    *bool `yaml:"speech_to_text" json:"speech_to_text"`
+	TextToSpeech    *bool `yaml:"text_to_speech" json:"text_to_speech"`
+}
+
+const (
+	KeyImageGeneration = "image_generation"
+	KeySpeechToText    = "speech_to_text"
+	KeyTextToSpeech    = "text_to_speech"
+)
+
+func metadataFrom(m any) *ManifestMetadata {
+	switch v := m.(type) {
+	case *V1Manifest:
+		return v.Metadata
+	case *V2Manifest:
+		return v.Metadata
+	default:
+		return nil
+	}
+}
+
+// SupportsGenerativeForModel reports known-true PT-GEN keys (omit ≠ false).
+// Provider ads are not used as fallback (ALR-GEN-001 or_provider(false)).
+func SupportsGenerativeForModel(m any, modelID, key string) bool {
+	meta := metadataFrom(m)
+	if meta == nil || meta.Models == nil {
+		return false
+	}
+	entry, ok := meta.Models[modelID]
+	if !ok || entry.ModelCapabilities == nil {
+		return false
+	}
+	caps := entry.ModelCapabilities
+	var flag *bool
+	switch key {
+	case KeyImageGeneration:
+		flag = caps.ImageGeneration
+	case KeySpeechToText:
+		flag = caps.SpeechToText
+	case KeyTextToSpeech:
+		flag = caps.TextToSpeech
+	default:
+		return false
+	}
+	return flag != nil && *flag
 }
 
 type CapabilityProfile struct {

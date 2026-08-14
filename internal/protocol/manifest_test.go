@@ -130,3 +130,36 @@ func TestEndpointForEmbeddingsRerankXREmb(t *testing.T) {
 		}
 	}
 }
+
+func TestSupportsGenerativeForModelOmitFailClosed(t *testing.T) {
+	loader := NewLoader()
+	manifestYAML := `
+id: openai
+protocol_version: "2.0"
+endpoint:
+  base_url: "https://api.openai.com/v1"
+capabilities:
+  required: ["text"]
+  optional: ["image_generation"]
+metadata:
+  models:
+    gpt-image-1:
+      model_capabilities:
+        image_generation: true
+    gpt-4o:
+      context_window: 128000
+`
+	manifest, err := loader.LoadBytes([]byte(manifestYAML), ".yaml")
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if !SupportsGenerativeForModel(manifest, "gpt-image-1", KeyImageGeneration) {
+		t.Fatal("declared image_generation should be true")
+	}
+	if SupportsGenerativeForModel(manifest, "gpt-4o", KeyImageGeneration) {
+		t.Fatal("omitted image_generation must not be true")
+	}
+	if SupportsGenerativeForModel(manifest, "missing", KeyImageGeneration) {
+		t.Fatal("missing model must not be true")
+	}
+}

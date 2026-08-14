@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+### Added
+
+- **Experimental generative types** (ALG-GEN-001): `SupportsGenerativeForModel`
+  (omit ≠ false) and Image/STT/TTS request DTOs. HTTP L-Exec clients deferred
+  to ALG-GEN-002 (same types-first split as ALT-GEN-001).
+
 ### Changed
 
 - **PROTO-PIN**: CI checkouts `ailib-official/ai-protocol` `29015b4` (PT-TTC-012 +
