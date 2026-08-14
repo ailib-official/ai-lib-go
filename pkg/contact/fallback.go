@@ -117,6 +117,24 @@ func (f *FallbackClient) TTSSpeak(ctx context.Context, req ailib.TTSRequest) (*a
 	})
 }
 
+func (f *FallbackClient) GenerateImage(ctx context.Context, req ailib.ImageGenerationRequest) (*ailib.ImageGenerationResult, error) {
+	return callWithFallback(f, func(c ailib.Client) (*ailib.ImageGenerationResult, error) {
+		return c.GenerateImage(ctx, req)
+	})
+}
+
+func (f *FallbackClient) TranscribeSpeech(ctx context.Context, req ailib.SpeechToTextRequest) (*ailib.SpeechToTextResult, error) {
+	return callWithFallback(f, func(c ailib.Client) (*ailib.SpeechToTextResult, error) {
+		return c.TranscribeSpeech(ctx, req)
+	})
+}
+
+func (f *FallbackClient) SynthesizeSpeech(ctx context.Context, req ailib.TextToSpeechRequest) (*ailib.TextToSpeechResult, error) {
+	return callWithFallback(f, func(c ailib.Client) (*ailib.TextToSpeechResult, error) {
+		return c.SynthesizeSpeech(ctx, req)
+	})
+}
+
 func (f *FallbackClient) Rerank(ctx context.Context, req ailib.RerankRequest) (*ailib.RerankResponse, error) {
 	return callWithFallback(f, func(c ailib.Client) (*ailib.RerankResponse, error) {
 		return c.Rerank(ctx, req)

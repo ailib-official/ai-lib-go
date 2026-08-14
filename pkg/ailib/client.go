@@ -277,54 +277,6 @@ func (c *client) BatchCancel(ctx context.Context, batchID string) (*BatchJob, er
 	return &out, nil
 }
 
-func (c *client) STTTranscribe(ctx context.Context, req STTRequest) (*STTResponse, error) {
-	if err := c.requireCapability("stt"); err != nil {
-		return nil, err
-	}
-	path, method := protocol.EndpointFor(c.manifest, "audio_transcriptions", "/audio/transcriptions")
-	var out STTResponse
-	if err := c.sendJSON(ctx, method, path, req, &out); err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
-func (c *client) TTSSpeak(ctx context.Context, req TTSRequest) (*TTSResponse, error) {
-	if err := c.requireCapability("tts"); err != nil {
-		return nil, err
-	}
-	path, method := protocol.EndpointFor(c.manifest, "audio_speech", "/audio/speech")
-	httpReq, err := c.newRequest(ctx, method, path, req)
-	if err != nil {
-		return nil, err
-	}
-
-	var out TTSResponse
-	err = resilience.Execute(ctx, resilience.DefaultPolicy(), func(_ context.Context) error {
-		resp, reqErr := c.http.Do(httpReq)
-		if reqErr != nil {
-			return reqErr
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode >= 400 {
-			return parseHTTPError(c.manifest, resp)
-		}
-		b, readErr := io.ReadAll(resp.Body)
-		if readErr != nil {
-			return readErr
-		}
-		out = TTSResponse{
-			AudioData: b,
-			MimeType:  resp.Header.Get("Content-Type"),
-		}
-		return nil
-	}, isRetryableErr)
-	if err != nil {
-		return nil, err
-	}
-	return &out, nil
-}
-
 func (c *client) Rerank(ctx context.Context, req RerankRequest) (*RerankResponse, error) {
 	if err := c.requireCapability("reranking"); err != nil {
 		return nil, err
@@ -440,7 +392,8 @@ func (c *client) newRequest(ctx context.Context, method, path string, payload an
 		bodyBytes = b
 		body = bytes.NewReader(bodyBytes)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, c.baseURL+path, body)
+	url := joinRequestURL(c.baseURL, path)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
 	if err != nil {
 		return nil, err
 	}
@@ -460,6 +413,41 @@ func (c *client) newRequest(ctx context.Context, method, path string, payload an
 	req.Header.Set("Content-Type", "application/json")
 	c.setHeaders(req)
 	return req, nil
+}
+
+func (c *client) newMultipartRequest(ctx context.Context, method, path string, body []byte, contentType string) (*http.Request, error) {
+	if err := validateRequestMeta(method, path); err != nil {
+		return nil, err
+	}
+	url := joinRequestURL(c.baseURL, path)
+	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	req.ContentLength = int64(len(body))
+	req.GetBody = func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(body)), nil
+	}
+	if len(c.authQueryParams) > 0 {
+		q := req.URL.Query()
+		for k, v := range c.authQueryParams {
+			q.Set(k, v)
+		}
+		req.URL.RawQuery = q.Encode()
+	}
+	req.Header.Set("Content-Type", contentType)
+	c.setHeaders(req)
+	return req, nil
+}
+
+func joinRequestURL(baseURL, path string) string {
+	if strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://") {
+		return path
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return baseURL + path
 }
 
 func (c *client) setHeaders(req *http.Request) {
@@ -575,7 +563,11 @@ func isRetryableErr(err error) bool {
 }
 
 func validateRequestMeta(method, path string) error {
-	if path == "" || !strings.HasPrefix(path, "/") {
+	if path == "" {
+		return &APIError{Code: ErrInvalidRequest, StatusCode: 400, Message: "endpoint path must not be empty"}
+	}
+	abs := strings.HasPrefix(path, "http://") || strings.HasPrefix(path, "https://")
+	if !abs && !strings.HasPrefix(path, "/") {
 		return &APIError{Code: ErrInvalidRequest, StatusCode: 400, Message: "endpoint path must start with /"}
 	}
 	switch strings.ToUpper(method) {

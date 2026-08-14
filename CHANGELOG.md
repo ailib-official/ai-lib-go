@@ -4,9 +4,12 @@
 
 ### Added
 
+- **Experimental generative L-Exec** (ALG-GEN-002): `GenerateImage` /
+  `TranscribeSpeech` / `SynthesizeSpeech` via existing Client HTTP stack;
+  `RequireGenerativeEndpoint` (omit≠false); openai/dashscope image adapters;
+  absolute L-Exec URLs. `STTTranscribe`/`TTSSpeak` prefer PT-GEN when declared.
 - **Experimental generative types** (ALG-GEN-001): `SupportsGenerativeForModel`
-  (omit ≠ false) and Image/STT/TTS request DTOs. HTTP L-Exec clients deferred
-  to ALG-GEN-002 (same types-first split as ALT-GEN-001).
+  (omit ≠ false) and Image/STT/TTS request DTOs.
 
 ### Changed
 
