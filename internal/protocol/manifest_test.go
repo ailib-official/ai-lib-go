@@ -163,3 +163,97 @@ metadata:
 		t.Fatal("missing model must not be true")
 	}
 }
+
+func TestRequireGenerativeEndpointFailClosedAndAdapters(t *testing.T) {
+	loader := NewLoader()
+	openaiYAML := `
+id: openai
+protocol_version: "2.0"
+endpoint:
+  base_url: "https://api.openai.com/v1"
+endpoints:
+  image_generation:
+    path: "/images/generations"
+    method: POST
+    adapter: openai
+  speech_to_text:
+    path: "/audio/transcriptions"
+    adapter: openai
+metadata:
+  models:
+    gpt-image-1:
+      model_capabilities:
+        image_generation: true
+    whisper-1:
+      model_capabilities:
+        speech_to_text: true
+    gpt-4o:
+      context_window: 128000
+`
+	openai, err := loader.LoadBytes([]byte(openaiYAML), ".yaml")
+	if err != nil {
+		t.Fatalf("load openai: %v", err)
+	}
+	if _, err := RequireGenerativeEndpoint(openai, "gpt-4o", KeyImageGeneration); err == nil {
+		t.Fatal("omit must fail-closed")
+	} else if !strings.Contains(err.Error(), "omit") {
+		t.Fatalf("expected omit in error, got %v", err)
+	}
+	ep, err := RequireGenerativeEndpoint(openai, "gpt-image-1", KeyImageGeneration)
+	if err != nil {
+		t.Fatalf("openai image: %v", err)
+	}
+	if ep.Path != "/images/generations" || ep.Adapter != "openai" {
+		t.Fatalf("unexpected ep: %+v", ep)
+	}
+
+	missingYAML := `
+id: genprov
+protocol_version: "2.0"
+endpoint:
+  base_url: "https://example.com/v1"
+metadata:
+  models:
+    img-1:
+      model_capabilities:
+        image_generation: true
+`
+	missing, err := loader.LoadBytes([]byte(missingYAML), ".yaml")
+	if err != nil {
+		t.Fatalf("load missing: %v", err)
+	}
+	if _, err := RequireGenerativeEndpoint(missing, "img-1", KeyImageGeneration); err == nil {
+		t.Fatal("missing L-Exec must fail")
+	} else if !strings.Contains(err.Error(), "endpoints.image_generation") {
+		t.Fatalf("expected endpoints.image_generation, got %v", err)
+	}
+
+	qwenYAML := `
+id: qwen
+protocol_version: "2.0"
+endpoint:
+  base_url: "https://dashscope.aliyuncs.com/compatible-mode/v1"
+endpoints:
+  image_generation:
+    path: "https://dashscope.aliyuncs.com/api/v1/services/aigc/multimodal-generation/generation"
+    method: POST
+    adapter: dashscope
+metadata:
+  models:
+    qwen-image-plus:
+      model_capabilities:
+        image_generation: true
+`
+	qwen, err := loader.LoadBytes([]byte(qwenYAML), ".yaml")
+	if err != nil {
+		t.Fatalf("load qwen: %v", err)
+	}
+	qep, err := RequireGenerativeEndpoint(qwen, "qwen-image-plus", KeyImageGeneration)
+	if err != nil {
+		t.Fatalf("qwen: %v", err)
+	}
+	if !strings.HasPrefix(qep.Path, "https://") || qep.Adapter != "dashscope" {
+		t.Fatalf("unexpected qwen ep: %+v", qep)
+	}
+}
+

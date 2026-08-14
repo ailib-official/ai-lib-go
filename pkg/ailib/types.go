@@ -125,6 +125,10 @@ type Client interface {
 
 	STTTranscribe(ctx context.Context, req STTRequest) (*STTResponse, error)
 	TTSSpeak(ctx context.Context, req TTSRequest) (*TTSResponse, error)
+	// Experimental PT-GEN L-Exec (ALG-GEN-002)
+	GenerateImage(ctx context.Context, req ImageGenerationRequest) (*ImageGenerationResult, error)
+	TranscribeSpeech(ctx context.Context, req SpeechToTextRequest) (*SpeechToTextResult, error)
+	SynthesizeSpeech(ctx context.Context, req TextToSpeechRequest) (*TextToSpeechResult, error)
 	Rerank(ctx context.Context, req RerankRequest) (*RerankResponse, error)
 	MCPListTools(ctx context.Context) (*MCPListToolsResponse, error)
 	MCPCallTool(ctx context.Context, req MCPCallToolRequest) (*MCPCallToolResponse, error)

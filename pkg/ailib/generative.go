@@ -1,5 +1,5 @@
 // Experimental generative request/response types (ALG-GEN-001 / PT-GEN-001).
-// 生成式请求类型：与 Rust/Python/TS 同键；HTTP driver 见 ALG-GEN-002（本任务 defer）。
+// 生成式请求类型：与 Rust/Python/TS 同键；HTTP L-Exec 见 generative_lexec.go（ALG-GEN-002）。
 package ailib
 
 type ImageGenerationRequest struct {
@@ -22,7 +22,8 @@ type ImageGenerationResult struct {
 
 type SpeechToTextRequest struct {
 	Model       string  `json:"model"`
-	AudioSource string  `json:"audio_source"`
+	AudioSource string  `json:"audio_source,omitempty"`
+	Audio       []byte  `json:"-"` // preferred over path for in-memory / tests
 	Language    *string `json:"language,omitempty"`
 	Prompt      *string `json:"prompt,omitempty"`
 }
