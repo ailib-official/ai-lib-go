@@ -34,7 +34,7 @@ func TestEnrichNonstream_ResponsePathsContent(t *testing.T) {
 	}
 }
 
-func TestEnrichNonstream_OpenAIReasoningFallback(t *testing.T) {
+func TestEnrichNonstream_OpenAIReasoningKeptSeparate(t *testing.T) {
 	m := &protocol.V2Manifest{
 		ID:              "p",
 		ProtocolVersion: "2.0",
@@ -54,8 +54,11 @@ func TestEnrichNonstream_OpenAIReasoningFallback(t *testing.T) {
 	_ = json.Unmarshal(mustJSON(t, raw), &out)
 	EnrichNonstreamChatResponse(m, raw, &out)
 	got, _ := out.Choices[0].Message.Content.(string)
-	if got != "think" {
-		t.Fatalf("content: want think got %q", got)
+	if got != "" {
+		t.Fatalf("content: want empty got %q", got)
+	}
+	if out.Thinking != "think" {
+		t.Fatalf("thinking: want think got %q", out.Thinking)
 	}
 }
 
