@@ -5,10 +5,12 @@ import (
 	"strings"
 
 	"github.com/ailib-official/ai-lib-go/internal/protocol"
+	"github.com/ailib-official/ai-lib-go/internal/thinking"
 )
 
 // EnrichNonstreamChatResponse fills assistant text / usage / finish_reason from manifest
 // response_paths when needed (v2 parity with Rust/Python).
+// Structured reasoning stays on ChatResponse.Thinking — never promote into content (ALG-RSN-001).
 func EnrichNonstreamChatResponse(manifest any, root map[string]any, out *ChatResponse) {
 	rp := protocol.ResponsePathsFor(manifest)
 	if root == nil {
@@ -37,17 +39,17 @@ func EnrichNonstreamChatResponse(manifest any, root map[string]any, out *ChatRes
 	if text == "" {
 		text = firstNonEmpty("choices[0].message.content")
 	}
-	if text == "" {
-		reason := []string{}
-		if rp != nil {
-			reason = append(reason, rp.ReasoningContent, rp.Reasoning)
-		}
-		reason = append(reason, "choices[0].message.reasoning_content")
-		text = firstNonEmpty(reason...)
-	}
 
 	if text != "" {
 		ensureFirstChoiceContent(out, text)
+	}
+
+	think := thinking.FromOpenaiCompatMessage(root)
+	if think == "" && rp != nil {
+		think = firstNonEmpty(rp.ReasoningContent, rp.Reasoning)
+	}
+	if think != "" {
+		out.Thinking = think
 	}
 
 	if rp != nil && strings.TrimSpace(rp.Usage) != "" {

@@ -4,6 +4,8 @@
 
 ### Added
 
+- **Thinking channel parity (ALG-RSN-001)**: OpenAI-compat wire aliases →
+  `ThinkingDelta`; `ChatResponse.Thinking`; shared `internal/thinking` (GOV-007).
 - **Experimental generative L-Exec** (ALG-GEN-002): `GenerateImage` /
   `TranscribeSpeech` / `SynthesizeSpeech` via existing Client HTTP stack;
   `RequireGenerativeEndpoint` (omit≠false); openai/dashscope image adapters;
@@ -13,6 +15,8 @@
 
 ### Changed
 
+- **Non-stream thinking separation (ALG-RSN-001)**: empty content no longer
+  backfills from reasoning fields by default; reasoning stays on `Thinking`.
 - **PROTO-PIN**: CI checkouts `ailib-official/ai-protocol` `29015b4` (PT-TTC-012 +
   PT-GEN-003; module protocol still 1.2.0). Same pin class as ai-lib-python #31.
   No text-tool parser in this runtime.

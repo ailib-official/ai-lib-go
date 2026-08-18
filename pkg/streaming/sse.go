@@ -9,6 +9,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/ailib-official/ai-lib-go/internal/thinking"
 	"github.com/ailib-official/ai-lib-go/pkg/ailib"
 )
 
@@ -101,12 +102,11 @@ func (m *OpenAIEventMapper) Map(data map[string]any) []ailib.StreamingEvent {
 		return events
 	}
 
-	// Extract reasoning_content (for thinking models)
+	// Extract reasoning/thinking (ALG-RSN-001 aliases); keep content separate.
 	if choices, ok := data["choices"].([]any); ok && len(choices) > 0 {
 		if choice, ok := choices[0].(map[string]any); ok {
 			if delta, ok := choice["delta"].(map[string]any); ok {
-				// Reasoning/thinking content
-				if reasoning, ok := delta["reasoning_content"].(string); ok && reasoning != "" {
+				if reasoning := thinking.FromOpenaiCompatDelta(data); reasoning != "" {
 					events = append(events, ailib.StreamingEvent{
 						Type:     "ThinkingDelta",
 						Thinking: reasoning,
@@ -121,7 +121,7 @@ func (m *OpenAIEventMapper) Map(data map[string]any) []ailib.StreamingEvent {
 					})
 				}
 
-				// Tool calls
+				// Tool calls (pre-existing on main; not ALG-RSN-001 scope)
 				if toolCalls, ok := delta["tool_calls"].([]any); ok {
 					for _, tc := range toolCalls {
 						if tcMap, ok := tc.(map[string]any); ok {

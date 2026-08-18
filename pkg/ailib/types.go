@@ -61,6 +61,9 @@ type ChatResponse struct {
 	Model   string   `json:"model"`
 	Choices []Choice `json:"choices"`
 	Usage   *Usage   `json:"usage,omitempty"`
+	// Thinking is aggregated extended reasoning (ALG-RSN-001). Empty when absent.
+	// Additive — does not change Choices[].Message.Content semantics.
+	Thinking string `json:"thinking,omitempty"`
 	// ExecutionMetadata is populated by E-layer Client.Chat on success (PT-071 / schemas/v2/execution-metadata.json).
 	ExecutionMetadata ExecutionMetadata `json:"execution_metadata"`
 }
