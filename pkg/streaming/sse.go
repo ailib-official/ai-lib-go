@@ -102,79 +102,79 @@ func (m *OpenAIEventMapper) Map(data map[string]any) []ailib.StreamingEvent {
 		return events
 	}
 
-		// Extract reasoning/thinking (ALG-RSN-001 aliases); keep content separate.
-		if choices, ok := data["choices"].([]any); ok && len(choices) > 0 {
-			if choice, ok := choices[0].(map[string]any); ok {
-				if delta, ok := choice["delta"].(map[string]any); ok {
-					if reasoning := thinking.FromOpenaiCompatDelta(data); reasoning != "" {
-						events = append(events, ailib.StreamingEvent{
-							Type:     "ThinkingDelta",
-							Thinking: reasoning,
-						})
-					}
+	// Extract reasoning/thinking (ALG-RSN-001 aliases); keep content separate.
+	if choices, ok := data["choices"].([]any); ok && len(choices) > 0 {
+		if choice, ok := choices[0].(map[string]any); ok {
+			if delta, ok := choice["delta"].(map[string]any); ok {
+				if reasoning := thinking.FromOpenaiCompatDelta(data); reasoning != "" {
+					events = append(events, ailib.StreamingEvent{
+						Type:     "ThinkingDelta",
+						Thinking: reasoning,
+					})
+				}
 
-					// Regular content
-					if content, ok := delta["content"].(string); ok && content != "" {
-						events = append(events, ailib.StreamingEvent{
-							Type:  "PartialContentDelta",
-							Delta: content,
-						})
-					}
+				// Regular content
+				if content, ok := delta["content"].(string); ok && content != "" {
+					events = append(events, ailib.StreamingEvent{
+						Type:  "PartialContentDelta",
+						Delta: content,
+					})
+				}
 
-					// Tool calls
-					if toolCalls, ok := delta["tool_calls"].([]any); ok {
-						for _, tc := range toolCalls {
-							if tcMap, ok := tc.(map[string]any); ok {
-								index := int(getFloat64(tcMap["index"]))
-								id, _ := tcMap["id"].(string)
+				// Tool calls (pre-existing on main; not ALG-RSN-001 scope)
+				if toolCalls, ok := delta["tool_calls"].([]any); ok {
+					for _, tc := range toolCalls {
+						if tcMap, ok := tc.(map[string]any); ok {
+							index := int(getFloat64(tcMap["index"]))
+							id, _ := tcMap["id"].(string)
 
-								if fn, ok := tcMap["function"].(map[string]any); ok {
-									name, _ := fn["name"].(string)
-									args, _ := fn["arguments"].(string)
+							if fn, ok := tcMap["function"].(map[string]any); ok {
+								name, _ := fn["name"].(string)
+								args, _ := fn["arguments"].(string)
 
-									// Tool call started
-									if id != "" && name != "" {
-										m.toolCallIDs[index] = id
-										events = append(events, ailib.StreamingEvent{
-											Type:       "ToolCallStarted",
-											ToolCallID: id,
-											ToolName:   name,
-											Index:      intPtr(index),
-										})
+								// Tool call started
+								if id != "" && name != "" {
+									m.toolCallIDs[index] = id
+									events = append(events, ailib.StreamingEvent{
+										Type:       "ToolCallStarted",
+										ToolCallID: id,
+										ToolName:   name,
+										Index:      intPtr(index),
+									})
+								}
+
+								// Partial tool call arguments
+								if args != "" {
+									// Use stored ID if available
+									resolvedID := id
+									if resolvedID == "" {
+										resolvedID = m.toolCallIDs[index]
 									}
-
-									// Partial tool call arguments
-									if args != "" {
-										// Use stored ID if available
-										resolvedID := id
-										if resolvedID == "" {
-											resolvedID = m.toolCallIDs[index]
-										}
-										if resolvedID != "" {
-											events = append(events, ailib.StreamingEvent{
-												Type:       "PartialToolCall",
-												ToolCallID: resolvedID,
-												Arguments:  args,
-												Index:      intPtr(index),
-												IsComplete: false,
-											})
-										}
+									if resolvedID != "" {
+										events = append(events, ailib.StreamingEvent{
+											Type:       "PartialToolCall",
+											ToolCallID: resolvedID,
+											Arguments:  args,
+											Index:      intPtr(index),
+											IsComplete: false,
+										})
 									}
 								}
 							}
 						}
 					}
 				}
+			}
 
-				// Finish reason
-				if finishReason, ok := choice["finish_reason"].(string); ok && finishReason != "" {
-					events = append(events, ailib.StreamingEvent{
-						Type:         "Metadata",
-						FinishReason: finishReason,
-					})
-				}
+			// Finish reason
+			if finishReason, ok := choice["finish_reason"].(string); ok && finishReason != "" {
+				events = append(events, ailib.StreamingEvent{
+					Type:         "Metadata",
+					FinishReason: finishReason,
+				})
 			}
 		}
+	}
 
 	// Usage
 	if usage, ok := data["usage"].(map[string]any); ok {
